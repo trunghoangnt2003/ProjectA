@@ -1,201 +1,172 @@
-import { FormEvent, useState } from "react";
-import type { Product } from "../../types";
+import { useState } from "react";
 import {
-  createProduct,
-  deleteProduct,
-  updateProduct
-} from "../../services/productService";
+  Badge,
+  Button,
+  Group,
+  Modal,
+  NumberInput,
+  Select,
+  Stack,
+  Text,
+  TextInput,
+  Tooltip,
+  ActionIcon,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { useDisclosure } from "@mantine/hooks";
+import { IconPlus, IconPencil } from "@tabler/icons-react";
+import { PageHeader, DataTable, ConfirmDeleteButton } from "../common";
+import type { DataTableColumn } from "../common";
+import { useCrudResource } from "../../hooks/useCrudResource";
+import { productService, PRODUCT_LOW_STOCK } from "../../services/productService";
+import type { Product } from "../../types/domain";
+import { formatVnd } from "../../lib/format";
+import { toMessage, notify } from "../../lib/notify";
 
-interface ProductSectionProps {
-  products: Product[];
-  onReload: () => Promise<void>;
-  onClearError: () => void;
-  onError: (err: unknown) => void;
+const CATEGORIES = ["Nước suối", "Nước ngọt", "Tăng lực", "Bia", "Đồ ăn", "Khác"];
+
+function stockBadge(stock: number) {
+  if (stock <= 0) return { label: "Hết hàng", color: "red" };
+  if (stock <= PRODUCT_LOW_STOCK) return { label: "Sắp hết", color: "orange" };
+  return { label: "Còn hàng", color: "teal" };
 }
 
-const initialProductForm = {
-  id: "",
+type ProductForm = Omit<Product, "id">;
+
+const emptyForm: ProductForm = {
   name: "",
-  description: "",
-  price: ""
+  category: "Nước ngọt",
+  price: 10000,
+  stock: 0,
 };
 
-export function ProductSection({
-  products,
-  onReload,
-  onClearError,
-  onError
-}: ProductSectionProps) {
-  const [productForm, setProductForm] = useState(initialProductForm);
+export function ProductSection() {
+  const { data, loading, create, update, remove } = useCrudResource(
+    productService,
+    { created: "Đã thêm hàng hóa.", updated: "Đã cập nhật.", removed: "Đã xóa." }
+  );
+  const [opened, { open, close }] = useDisclosure(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const form = useForm<ProductForm>({
+    initialValues: emptyForm,
+    validate: {
+      name: (v) => (v.trim() ? null : "Nhập tên hàng hóa"),
+      price: (v) => (v > 0 ? null : "Giá phải lớn hơn 0"),
+    },
+  });
 
-    onClearError();
-    const payload = {
-      name: productForm.name,
-      description: productForm.description,
-      price: Number(productForm.price)
-    };
+  const openCreate = () => {
+    setEditingId(null);
+    form.setValues(emptyForm);
+    open();
+  };
 
+  const openEdit = (p: Product) => {
+    setEditingId(p.id);
+    form.setValues({ ...p });
+    open();
+  };
+
+  const handleSubmit = form.onSubmit(async (values) => {
+    setSaving(true);
     try {
-      if (productForm.id) {
-        await updateProduct(productForm.id, payload);
-      } else {
-        await createProduct(payload);
-      }
-
-      setProductForm(initialProductForm);
-      await onReload();
+      if (editingId) await update(editingId, values);
+      else await create(values);
+      close();
     } catch (err) {
-      onError(err);
+      notify.error(toMessage(err));
+    } finally {
+      setSaving(false);
     }
-  };
+  });
 
-  const startEdit = (product: Product) => {
-    setProductForm({
-      id: product.id,
-      name: product.name,
-      description: product.description ?? "",
-      price: product.price.toString()
-    });
-  };
-
-  const handleDelete = async (id: string) => {
-    onClearError();
-    try {
-      await deleteProduct(id);
-      await onReload();
-    } catch (err) {
-      onError(err);
-    }
-  };
+  const columns: DataTableColumn<Product>[] = [
+    { key: "name", header: "Tên", render: (p) => <Text fw={500}>{p.name}</Text> },
+    { key: "category", header: "Loại", render: (p) => p.category },
+    { key: "price", header: "Giá bán", align: "right", render: (p) => formatVnd(p.price) },
+    { key: "stock", header: "Tồn kho", align: "right", render: (p) => p.stock },
+    {
+      key: "status",
+      header: "Tình trạng",
+      render: (p) => {
+        const s = stockBadge(p.stock);
+        return (
+          <Badge variant="light" color={s.color}>
+            {s.label}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: 100,
+      render: (p) => (
+        <Group gap={4} justify="flex-end" wrap="nowrap">
+          <Tooltip label="Sửa">
+            <ActionIcon variant="subtle" onClick={() => openEdit(p)}>
+              <IconPencil size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <ConfirmDeleteButton itemLabel={p.name} onConfirm={() => remove(p.id)} />
+        </Group>
+      ),
+    },
+  ];
 
   return (
-    <div className="row g-4">
-      <div className="col-lg-5">
-        <div className="card">
-          <div className="card-body">
-            <h5 className="card-title">
-              {productForm.id ? "Edit Product" : "Create Product"}
-            </h5>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-3">
-                <label className="form-label">Name</label>
-                <input
-                  className="form-control"
-                  value={productForm.name}
-                  onChange={(event) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      name: event.target.value
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Description</label>
-                <textarea
-                  className="form-control"
-                  value={productForm.description}
-                  onChange={(event) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      description: event.target.value
-                    }))
-                  }
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Price</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  value={productForm.price}
-                  onChange={(event) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      price: event.target.value
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="d-flex gap-2">
-                <button type="submit" className="btn btn-primary">
-                  {productForm.id ? "Update" : "Create"}
-                </button>
-                {productForm.id && (
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={() => setProductForm(initialProductForm)}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-      <div className="col-lg-7">
-        <div className="card">
-          <div className="card-body">
-            <h5 className="card-title">Product List</h5>
-            <div className="table-responsive">
-              <table className="table table-striped align-middle">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Price</th>
-                    <th>Created</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.map((product) => (
-                    <tr key={product.id}>
-                      <td>
-                        <div className="fw-semibold">{product.name}</div>
-                        <small className="text-muted">
-                          {product.description}
-                        </small>
-                      </td>
-                      <td>{product.price}</td>
-                      <td>{new Date(product.createdAtUtc).toLocaleString()}</td>
-                      <td className="text-end">
-                        <div className="btn-group btn-group-sm">
-                          <button
-                            className="btn btn-outline-primary"
-                            onClick={() => startEdit(product)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="btn btn-outline-danger"
-                            onClick={() => handleDelete(product.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {products.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="text-center text-muted">
-                        No products
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <>
+      <PageHeader
+        title="Hàng hóa"
+        subtitle="Đồ uống, đồ ăn và hàng bán cho khách"
+        actions={
+          <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+            Thêm hàng hóa
+          </Button>
+        }
+      />
+
+      <DataTable
+        data={data}
+        columns={columns}
+        rowKey={(p) => p.id}
+        loading={loading}
+        emptyTitle="Chưa có hàng hóa nào"
+      />
+
+      <Modal
+        opened={opened}
+        onClose={close}
+        title={editingId ? "Sửa hàng hóa" : "Thêm hàng hóa"}
+        centered
+      >
+        <form onSubmit={handleSubmit}>
+          <Stack>
+            <TextInput label="Tên" required {...form.getInputProps("name")} />
+            <Select label="Loại" data={CATEGORIES} {...form.getInputProps("category")} />
+            <NumberInput
+              label="Giá bán (₫)"
+              min={0}
+              step={1000}
+              thousandSeparator="."
+              decimalSeparator=","
+              {...form.getInputProps("price")}
+            />
+            <NumberInput label="Tồn kho" min={0} {...form.getInputProps("stock")} />
+            <Group justify="flex-end" mt="sm">
+              <Button variant="default" onClick={close} disabled={saving}>
+                Hủy
+              </Button>
+              <Button type="submit" loading={saving}>
+                {editingId ? "Lưu" : "Thêm"}
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+    </>
   );
 }

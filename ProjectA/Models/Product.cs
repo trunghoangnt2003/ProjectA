@@ -1,12 +1,12 @@
 namespace ProjectA.Models
 {
+    /// <summary>Hàng hóa bán cho khách: đồ uống, đồ ăn… (FE gọi là "Hàng hóa").</summary>
     public class Product
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public decimal Price { get; set; }
-        public DateTime CreatedAtUtc { get; set; }
-        public Guid CreatedByUserId { get; set; }
+        public string Category { get; set; } = string.Empty; // Nước suối | Nước ngọt | Đồ ăn…
+        public decimal Price { get; set; }                   // giá bán
+        public int Stock { get; set; }                       // tồn kho
     }
 }

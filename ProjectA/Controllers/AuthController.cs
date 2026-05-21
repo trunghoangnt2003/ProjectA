@@ -43,14 +43,8 @@ namespace ProjectA.Controllers
                 return BadRequest(result.Errors.Select(e => e.Description));
             }
 
-            var token = await _tokenService.CreateTokenAsync(user);
-            return Ok(new AuthResponse
-            {
-                Token = token.Token,
-                ExpiresAtUtc = token.ExpiresAtUtc,
-                UserId = user.Id,
-                Email = user.Email ?? string.Empty
-            });
+            var tokens = await _tokenService.IssueTokensAsync(user);
+            return Ok(BuildResponse(tokens));
         }
 
         [HttpPost("login")]
@@ -68,14 +62,8 @@ namespace ProjectA.Controllers
                 return Unauthorized();
             }
 
-            var token = await _tokenService.CreateTokenAsync(user);
-            return Ok(new AuthResponse
-            {
-                Token = token.Token,
-                ExpiresAtUtc = token.ExpiresAtUtc,
-                UserId = user.Id,
-                Email = user.Email ?? string.Empty
-            });
+            var tokens = await _tokenService.IssueTokensAsync(user);
+            return Ok(BuildResponse(tokens));
         }
 
         [HttpPost("google")]
@@ -140,14 +128,42 @@ namespace ProjectA.Controllers
                 }
             }
 
-            var token = await _tokenService.CreateTokenAsync(user);
-            return Ok(new AuthResponse
-            {
-                Token = token.Token,
-                ExpiresAtUtc = token.ExpiresAtUtc,
-                UserId = user.Id,
-                Email = user.Email ?? string.Empty
-            });
+            var tokens = await _tokenService.IssueTokensAsync(user);
+            return Ok(BuildResponse(tokens));
         }
+
+        [HttpPost("refresh")]
+        public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshTokenRequest request)
+        {
+            var tokens = await _tokenService.RefreshAsync(request.RefreshToken);
+            if (tokens is null)
+            {
+                return Unauthorized();
+            }
+
+            return Ok(BuildResponse(tokens));
+        }
+
+        [HttpPost("revoke")]
+        public async Task<IActionResult> Revoke([FromBody] RefreshTokenRequest request)
+        {
+            var revoked = await _tokenService.RevokeAsync(request.RefreshToken);
+            if (!revoked)
+            {
+                return NotFound();
+            }
+
+            return NoContent();
+        }
+
+        private static AuthResponse BuildResponse(AuthTokenResult tokens) => new()
+        {
+            Token = tokens.AccessToken,
+            ExpiresAtUtc = tokens.AccessTokenExpiresAtUtc,
+            RefreshToken = tokens.RefreshToken,
+            RefreshTokenExpiresAtUtc = tokens.RefreshTokenExpiresAtUtc,
+            UserId = tokens.User.Id,
+            Email = tokens.User.Email ?? string.Empty
+        };
     }
 }

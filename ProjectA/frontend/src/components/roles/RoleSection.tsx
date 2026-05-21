@@ -1,155 +1,152 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  Button,
+  Card,
+  Group,
+  Modal,
+  Pill,
+  Select,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { useDisclosure } from "@mantine/hooks";
+import { IconPlus } from "@tabler/icons-react";
+import { PageHeader, EmptyState } from "../common";
 import type { Role } from "../../types";
 import {
   addRolePermission,
   createRole,
-  removeRolePermission
-} from "../../services/adminService";
-import { permissionOptions } from "../../constants/permissionOptions";
+  getRoles,
+  removeRolePermission,
+} from "../../services/mock/adminMock";
+import { permissionOptions, permissionLabel } from "../../constants/permissionOptions";
+import { notify, toMessage } from "../../lib/notify";
 
-interface RoleSectionProps {
-  roles: Role[];
-  onReloadRoles: () => Promise<void>;
-  onClearError: () => void;
-  onError: (err: unknown) => void;
-}
+export function RoleSection() {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [opened, { open, close }] = useDisclosure(false);
+  const [saving, setSaving] = useState(false);
 
-export function RoleSection({
-  roles,
-  onReloadRoles,
-  onClearError,
-  onError
-}: RoleSectionProps) {
-  const [newRoleName, setNewRoleName] = useState("");
-  const [rolePermissionInput, setRolePermissionInput] = useState<
-    Record<string, string>
-  >({});
-  const permissionOptionsMemo = useMemo(() => permissionOptions, []);
-
-  const handleCreateRole = async () => {
-    if (!newRoleName.trim()) {
-      return;
-    }
-
-    onClearError();
+  const reload = async () => {
     try {
-      await createRole(newRoleName);
-      setNewRoleName("");
-      await onReloadRoles();
+      setRoles(await getRoles());
     } catch (err) {
-      onError(err);
+      notify.error(toMessage(err));
     }
   };
 
-  const handleAddPermission = async (roleName: string) => {
-    const permission = rolePermissionInput[roleName];
-    if (!permission) {
-      return;
-    }
+  useEffect(() => {
+    void reload();
+  }, []);
 
-    onClearError();
+  const form = useForm({
+    initialValues: { name: "" },
+    validate: { name: (v) => (v.trim() ? null : "Nhập tên vai trò") },
+  });
+
+  const run = async (action: () => Promise<unknown>, ok: string) => {
     try {
-      await addRolePermission(roleName, permission);
-      setRolePermissionInput((prev) => ({ ...prev, [roleName]: "" }));
-      await onReloadRoles();
+      await action();
+      await reload();
+      notify.success(ok);
     } catch (err) {
-      onError(err);
+      notify.error(toMessage(err));
     }
   };
 
-  const handleRemovePermission = async (roleName: string, permission: string) => {
-    onClearError();
+  const handleCreate = form.onSubmit(async (values) => {
+    setSaving(true);
     try {
-      await removeRolePermission(roleName, permission);
-      await onReloadRoles();
+      await createRole(values.name.trim());
+      await reload();
+      notify.success("Đã tạo vai trò.");
+      form.reset();
+      close();
     } catch (err) {
-      onError(err);
+      notify.error(toMessage(err));
+    } finally {
+      setSaving(false);
     }
-  };
+  });
 
   return (
-    <div className="row g-4">
-      <div className="col-lg-4">
-        <div className="card">
-          <div className="card-body">
-            <h5 className="card-title">Create Role</h5>
-            <div className="input-group">
-              <input
-                className="form-control"
-                value={newRoleName}
-                onChange={(event) => setNewRoleName(event.target.value)}
-                placeholder="Role name"
+    <>
+      <PageHeader
+        title="Phân quyền"
+        subtitle="Quản lý vai trò và quyền tương ứng"
+        actions={
+          <Button leftSection={<IconPlus size={16} />} onClick={open}>
+            Thêm vai trò
+          </Button>
+        }
+      />
+
+      {roles.length === 0 ? (
+        <Card>
+          <EmptyState title="Chưa có vai trò" />
+        </Card>
+      ) : (
+        <Stack>
+          {roles.map((role) => (
+            <Card key={role.name}>
+              <Text fw={600}>{role.name}</Text>
+              <Group gap="xs" mt="sm">
+                {role.permissions.length === 0 && (
+                  <Text size="sm" c="dimmed">
+                    Chưa có quyền
+                  </Text>
+                )}
+                {role.permissions.map((perm) => (
+                  <Pill
+                    key={perm}
+                    withRemoveButton
+                    onRemove={() =>
+                      run(
+                        () => removeRolePermission(role.name, perm),
+                        "Đã gỡ quyền."
+                      )
+                    }
+                  >
+                    {permissionLabel(perm)}
+                  </Pill>
+                ))}
+              </Group>
+              <Select
+                mt="sm"
+                placeholder="Thêm quyền..."
+                searchable
+                data={permissionOptions
+                  .filter((p) => !role.permissions.includes(p))
+                  .map((p) => ({ value: p, label: permissionLabel(p) }))}
+                value={null}
+                onChange={(val) =>
+                  val &&
+                  run(() => addRolePermission(role.name, val), "Đã thêm quyền.")
+                }
+                maw={260}
               />
-              <button className="btn btn-primary" onClick={handleCreateRole}>
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="col-lg-8">
-        <div className="card">
-          <div className="card-body">
-            <h5 className="card-title">Roles</h5>
-            <div className="vstack gap-3">
-              {roles.map((role) => (
-                <div key={role.name} className="border rounded p-3">
-                  <div className="fw-semibold">{role.name}</div>
-                  <div className="d-flex flex-wrap gap-2 mt-2">
-                    {role.permissions.map((permission) => (
-                      <span
-                        key={`${role.name}-${permission}`}
-                        className="badge bg-success"
-                      >
-                        {permission}
-                        <button
-                          className="btn btn-sm btn-link text-white ms-2 p-0"
-                          onClick={() =>
-                            handleRemovePermission(role.name, permission)
-                          }
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                    {role.permissions.length === 0 && (
-                      <span className="text-muted">No permissions</span>
-                    )}
-                  </div>
-                  <div className="input-group input-group-sm mt-2">
-                    <select
-                      className="form-select"
-                      value={rolePermissionInput[role.name] ?? ""}
-                      onChange={(event) =>
-                        setRolePermissionInput((prev) => ({
-                          ...prev,
-                          [role.name]: event.target.value
-                        }))
-                      }
-                    >
-                      <option value="">Select permission</option>
-                      {permissionOptionsMemo.map((permission) => (
-                        <option key={permission} value={permission}>
-                          {permission}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="btn btn-outline-primary"
-                      onClick={() => handleAddPermission(role.name)}
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {roles.length === 0 && (
-                <div className="text-muted">No roles</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Card>
+          ))}
+        </Stack>
+      )}
+
+      <Modal opened={opened} onClose={close} title="Thêm vai trò" centered>
+        <form onSubmit={handleCreate}>
+          <Stack>
+            <TextInput label="Tên vai trò" required {...form.getInputProps("name")} />
+            <Group justify="flex-end" mt="sm">
+              <Button variant="default" onClick={close} disabled={saving}>
+                Hủy
+              </Button>
+              <Button type="submit" loading={saving}>
+                Tạo
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+    </>
   );
 }

@@ -105,6 +105,62 @@ builder.Services.AddAuthorization(options =>
         policy.Requirements.Add(new PermissionRequirement(Permissions.ProductDelete));
         policy.Requirements.Add(new BusinessHoursApprovalRequirement());
     });
+
+    // Court — xem chỉ cần quyền; thêm/sửa/xóa phải trong ca làm việc (RBAC theo ca).
+    options.AddPolicy(Policies.CourtView, policy =>
+        policy.Requirements.Add(new PermissionRequirement(Permissions.CourtView)));
+
+    options.AddPolicy(Policies.CourtAdd, policy =>
+    {
+        policy.Requirements.Add(new PermissionRequirement(Permissions.CourtAdd));
+        policy.Requirements.Add(new BusinessHoursApprovalRequirement());
+    });
+
+    options.AddPolicy(Policies.CourtEdit, policy =>
+    {
+        policy.Requirements.Add(new PermissionRequirement(Permissions.CourtEdit));
+        policy.Requirements.Add(new BusinessHoursApprovalRequirement());
+    });
+
+    options.AddPolicy(Policies.CourtDelete, policy =>
+    {
+        policy.Requirements.Add(new PermissionRequirement(Permissions.CourtDelete));
+        policy.Requirements.Add(new BusinessHoursApprovalRequirement());
+    });
+
+    // Các module domain — xem chỉ cần quyền; thêm/sửa/xóa phải trong ca (RBAC theo ca).
+    void AddViewPolicy(string policyName, string permission) =>
+        options.AddPolicy(policyName, p => p.Requirements.Add(new PermissionRequirement(permission)));
+
+    void AddWritePolicy(string policyName, string permission) =>
+        options.AddPolicy(policyName, p =>
+        {
+            p.Requirements.Add(new PermissionRequirement(permission));
+            p.Requirements.Add(new BusinessHoursApprovalRequirement());
+        });
+
+    AddViewPolicy(Policies.CustomerView, Permissions.CustomerView);
+    AddWritePolicy(Policies.CustomerAdd, Permissions.CustomerAdd);
+    AddWritePolicy(Policies.CustomerEdit, Permissions.CustomerEdit);
+    AddWritePolicy(Policies.CustomerDelete, Permissions.CustomerDelete);
+
+    AddViewPolicy(Policies.BookingView, Permissions.BookingView);
+    AddWritePolicy(Policies.BookingAdd, Permissions.BookingAdd);
+    AddWritePolicy(Policies.BookingEdit, Permissions.BookingEdit);
+    AddWritePolicy(Policies.BookingDelete, Permissions.BookingDelete);
+
+    AddViewPolicy(Policies.SupplyView, Permissions.SupplyView);
+    AddWritePolicy(Policies.SupplyAdd, Permissions.SupplyAdd);
+    AddWritePolicy(Policies.SupplyEdit, Permissions.SupplyEdit);
+    AddWritePolicy(Policies.SupplyDelete, Permissions.SupplyDelete);
+
+    AddViewPolicy(Policies.OrderView, Permissions.OrderView);
+    AddWritePolicy(Policies.OrderAdd, Permissions.OrderAdd);
+
+    AddViewPolicy(Policies.PaymentView, Permissions.PaymentView);
+    AddWritePolicy(Policies.PaymentAdd, Permissions.PaymentAdd);
+    AddWritePolicy(Policies.PaymentEdit, Permissions.PaymentEdit);
+    AddWritePolicy(Policies.PaymentDelete, Permissions.PaymentDelete);
 });
 
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();

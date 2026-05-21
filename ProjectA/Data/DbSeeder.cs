@@ -21,6 +21,12 @@ namespace ProjectA.Data
 
             var adminRole = await EnsureRoleAsync(roleManager, "Admin");
             await EnsureRolePermissionAsync(roleManager, adminRole, Permissions.ProductAll);
+            await EnsureRolePermissionAsync(roleManager, adminRole, Permissions.CourtAll);
+            await EnsureRolePermissionAsync(roleManager, adminRole, Permissions.CustomerAll);
+            await EnsureRolePermissionAsync(roleManager, adminRole, Permissions.BookingAll);
+            await EnsureRolePermissionAsync(roleManager, adminRole, Permissions.SupplyAll);
+            await EnsureRolePermissionAsync(roleManager, adminRole, Permissions.OrderAll);
+            await EnsureRolePermissionAsync(roleManager, adminRole, Permissions.PaymentAll);
 
             var user = await userManager.FindByEmailAsync(options.Email);
             if (user is null)
@@ -29,7 +35,8 @@ namespace ProjectA.Data
                 {
                     UserName = options.Email,
                     Email = options.Email,
-                    IsAdminApproved = true
+                    IsAdminApproved = true,
+                    Shift = "S1"
                 };
 
                 var createResult = await userManager.CreateAsync(user, options.Password);
@@ -38,9 +45,10 @@ namespace ProjectA.Data
                     return;
                 }
             }
-            else if (!user.IsAdminApproved)
+            else if (!user.IsAdminApproved || string.IsNullOrWhiteSpace(user.Shift))
             {
                 user.IsAdminApproved = true;
+                user.Shift ??= "S1";
                 await userManager.UpdateAsync(user);
             }
 

@@ -1,315 +1,231 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  Badge,
+  Button,
+  Card,
+  Group,
+  Modal,
+  Pill,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  PasswordInput,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { useDisclosure } from "@mantine/hooks";
+import { IconPlus } from "@tabler/icons-react";
+import { PageHeader, EmptyState } from "../common";
 import type { AdminUser, Role } from "../../types";
 import {
   addUserPermission,
   addUserRole,
   approveUser,
   createUser,
+  getRoles,
+  getUsers,
   removeUserPermission,
   removeUserRole,
-  revokeUserApproval
-} from "../../services/adminService";
-import { permissionOptions } from "../../constants/permissionOptions";
+  revokeUserApproval,
+} from "../../services/mock/adminMock";
+import { permissionOptions, permissionLabel } from "../../constants/permissionOptions";
+import { notify, toMessage } from "../../lib/notify";
 
-interface UserSectionProps {
-  users: AdminUser[];
-  roles: Role[];
-  onReloadUsers: () => Promise<void>;
-  onClearError: () => void;
-  onError: (err: unknown) => void;
-}
+export function UserSection() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [opened, { open, close }] = useDisclosure(false);
+  const [saving, setSaving] = useState(false);
 
-export function UserSection({
-  users,
-  roles,
-  onReloadUsers,
-  onClearError,
-  onError
-}: UserSectionProps) {
-  const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserPassword, setNewUserPassword] = useState("");
-  const [newUserApproved, setNewUserApproved] = useState(false);
-
-  const [userRoleInput, setUserRoleInput] = useState<Record<string, string>>(
-    {}
-  );
-  const [userPermissionInput, setUserPermissionInput] = useState<
-    Record<string, string>
-  >({});
-
-  const permissionOptionsMemo = useMemo(() => permissionOptions, []);
-
-  const handleCreateUser = async () => {
-    if (!newUserEmail.trim() || !newUserPassword.trim()) {
-      return;
-    }
-
-    onClearError();
+  const reload = async () => {
     try {
-      await createUser({
-        email: newUserEmail,
-        password: newUserPassword,
-        isAdminApproved: newUserApproved
-      });
-      setNewUserEmail("");
-      setNewUserPassword("");
-      setNewUserApproved(false);
-      await onReloadUsers();
+      const [u, r] = await Promise.all([getUsers(), getRoles()]);
+      setUsers(u);
+      setRoles(r);
     } catch (err) {
-      onError(err);
+      notify.error(toMessage(err));
     }
   };
 
-  const handleApproval = async (userId: string, approved: boolean) => {
-    onClearError();
+  useEffect(() => {
+    void reload();
+  }, []);
+
+  const form = useForm({
+    initialValues: { email: "", password: "", isAdminApproved: false },
+    validate: {
+      email: (v) => (/^\S+@\S+$/.test(v) ? null : "Email không hợp lệ"),
+      password: (v) => (v.length >= 6 ? null : "Tối thiểu 6 ký tự"),
+    },
+  });
+
+  const run = async (action: () => Promise<unknown>, ok: string) => {
     try {
-      if (approved) {
-        await approveUser(userId);
-      } else {
-        await revokeUserApproval(userId);
-      }
-      await onReloadUsers();
+      await action();
+      await reload();
+      notify.success(ok);
     } catch (err) {
-      onError(err);
+      notify.error(toMessage(err));
     }
   };
 
-  const handleAddRole = async (userId: string) => {
-    const roleName = userRoleInput[userId];
-    if (!roleName) {
-      return;
-    }
-
-    onClearError();
+  const handleCreate = form.onSubmit(async (values) => {
+    setSaving(true);
     try {
-      await addUserRole(userId, roleName);
-      setUserRoleInput((prev) => ({ ...prev, [userId]: "" }));
-      await onReloadUsers();
+      await createUser(values);
+      await reload();
+      notify.success("Đã tạo người dùng.");
+      form.reset();
+      close();
     } catch (err) {
-      onError(err);
+      notify.error(toMessage(err));
+    } finally {
+      setSaving(false);
     }
-  };
-
-  const handleRemoveRole = async (userId: string, roleName: string) => {
-    onClearError();
-    try {
-      await removeUserRole(userId, roleName);
-      await onReloadUsers();
-    } catch (err) {
-      onError(err);
-    }
-  };
-
-  const handleAddPermission = async (userId: string) => {
-    const permission = userPermissionInput[userId];
-    if (!permission) {
-      return;
-    }
-
-    onClearError();
-    try {
-      await addUserPermission(userId, permission);
-      setUserPermissionInput((prev) => ({ ...prev, [userId]: "" }));
-      await onReloadUsers();
-    } catch (err) {
-      onError(err);
-    }
-  };
-
-  const handleRemovePermission = async (
-    userId: string,
-    permission: string
-  ) => {
-    onClearError();
-    try {
-      await removeUserPermission(userId, permission);
-      await onReloadUsers();
-    } catch (err) {
-      onError(err);
-    }
-  };
+  });
 
   return (
-    <div className="row g-4">
-      <div className="col-lg-4">
-        <div className="card">
-          <div className="card-body">
-            <h5 className="card-title">Create User</h5>
-            <div className="mb-3">
-              <label className="form-label">Email</label>
-              <input
-                className="form-control"
-                value={newUserEmail}
-                onChange={(event) => setNewUserEmail(event.target.value)}
-              />
-            </div>
-            <div className="mb-3">
-              <label className="form-label">Password</label>
-              <input
-                type="password"
-                className="form-control"
-                value={newUserPassword}
-                onChange={(event) => setNewUserPassword(event.target.value)}
-              />
-            </div>
-            <div className="form-check mb-3">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                checked={newUserApproved}
-                onChange={(event) => setNewUserApproved(event.target.checked)}
-                id="approvedCheck"
-              />
-              <label className="form-check-label" htmlFor="approvedCheck">
-                Admin approved
-              </label>
-            </div>
-            <button
-              className="btn btn-primary w-100"
-              onClick={handleCreateUser}
-            >
-              Create
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="col-lg-8">
-        <div className="card">
-          <div className="card-body">
-            <h5 className="card-title">Users</h5>
-            <div className="vstack gap-3">
-              {users.map((user) => (
-                <div key={user.id} className="border rounded p-3">
-                  <div className="d-flex justify-content-between">
-                    <div>
-                      <div className="fw-semibold">{user.email}</div>
-                      <small className="text-muted">{user.id}</small>
-                    </div>
-                    <div>
-                      {user.isAdminApproved ? (
-                        <button
-                          className="btn btn-sm btn-outline-warning"
-                          onClick={() => handleApproval(user.id, false)}
-                        >
-                          Revoke approval
-                        </button>
-                      ) : (
-                        <button
-                          className="btn btn-sm btn-outline-success"
-                          onClick={() => handleApproval(user.id, true)}
-                        >
-                          Approve
-                        </button>
-                      )}
-                    </div>
-                  </div>
+    <>
+      <PageHeader
+        title="Người dùng"
+        subtitle="Quản lý tài khoản, vai trò và quyền trực tiếp"
+        actions={
+          <Button leftSection={<IconPlus size={16} />} onClick={open}>
+            Thêm người dùng
+          </Button>
+        }
+      />
 
-                  <div className="mt-3">
-                    <div className="fw-semibold">Roles</div>
-                    <div className="d-flex flex-wrap gap-2 mt-2">
-                      {user.roles.map((role) => (
-                        <span
-                          key={`${user.id}-${role}`}
-                          className="badge bg-secondary"
-                        >
-                          {role}
-                          <button
-                            className="btn btn-sm btn-link text-white ms-2 p-0"
-                            onClick={() => handleRemoveRole(user.id, role)}
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      ))}
-                      {user.roles.length === 0 && (
-                        <span className="text-muted">No roles</span>
-                      )}
-                    </div>
-                    <div className="input-group input-group-sm mt-2">
-                      <select
-                        className="form-select"
-                        value={userRoleInput[user.id] ?? ""}
-                        onChange={(event) =>
-                          setUserRoleInput((prev) => ({
-                            ...prev,
-                            [user.id]: event.target.value
-                          }))
-                        }
-                      >
-                        <option value="">Select role</option>
-                        {roles.map((role) => (
-                          <option key={role.name} value={role.name}>
-                            {role.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        className="btn btn-outline-primary"
-                        onClick={() => handleAddRole(user.id)}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="fw-semibold">Direct Permissions</div>
-                    <div className="d-flex flex-wrap gap-2 mt-2">
-                      {user.directPermissions.map((permission) => (
-                        <span
-                          key={`${user.id}-${permission}`}
-                          className="badge bg-info text-dark"
-                        >
-                          {permission}
-                          <button
-                            className="btn btn-sm btn-link text-dark ms-2 p-0"
-                            onClick={() =>
-                              handleRemovePermission(user.id, permission)
-                            }
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      ))}
-                      {user.directPermissions.length === 0 && (
-                        <span className="text-muted">
-                          No direct permissions
-                        </span>
-                      )}
-                    </div>
-                    <div className="input-group input-group-sm mt-2">
-                      <select
-                        className="form-select"
-                        value={userPermissionInput[user.id] ?? ""}
-                        onChange={(event) =>
-                          setUserPermissionInput((prev) => ({
-                            ...prev,
-                            [user.id]: event.target.value
-                          }))
-                        }
-                      >
-                        <option value="">Select permission</option>
-                        {permissionOptionsMemo.map((permission) => (
-                          <option key={permission} value={permission}>
-                            {permission}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        className="btn btn-outline-primary"
-                        onClick={() => handleAddPermission(user.id)}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
+      {users.length === 0 ? (
+        <Card>
+          <EmptyState title="Chưa có người dùng" />
+        </Card>
+      ) : (
+        <Stack>
+          {users.map((user) => (
+            <Card key={user.id}>
+              <Group justify="space-between" wrap="nowrap">
+                <div>
+                  <Text fw={600}>{user.email}</Text>
+                  <Text size="xs" c="dimmed">
+                    {user.id}
+                  </Text>
                 </div>
-              ))}
-              {users.length === 0 && <div className="text-muted">No users</div>}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+                <Group gap="sm">
+                  <Badge color={user.isAdminApproved ? "teal" : "gray"} variant="light">
+                    {user.isAdminApproved ? "Đã duyệt" : "Chờ duyệt"}
+                  </Badge>
+                  <Switch
+                    checked={user.isAdminApproved}
+                    onChange={(e) =>
+                      run(
+                        () =>
+                          e.currentTarget.checked
+                            ? approveUser(user.id)
+                            : revokeUserApproval(user.id),
+                        "Đã cập nhật phê duyệt."
+                      )
+                    }
+                    label="Duyệt"
+                  />
+                </Group>
+              </Group>
+
+              <Text size="sm" fw={600} mt="md" mb={6}>
+                Vai trò
+              </Text>
+              <Group gap="xs">
+                {user.roles.length === 0 && (
+                  <Text size="sm" c="dimmed">
+                    Chưa có vai trò
+                  </Text>
+                )}
+                {user.roles.map((role) => (
+                  <Pill
+                    key={role}
+                    withRemoveButton
+                    onRemove={() =>
+                      run(() => removeUserRole(user.id, role), "Đã gỡ vai trò.")
+                    }
+                  >
+                    {role}
+                  </Pill>
+                ))}
+              </Group>
+              <Select
+                mt="xs"
+                placeholder="Thêm vai trò..."
+                data={roles.map((r) => r.name).filter((r) => !user.roles.includes(r))}
+                value={null}
+                onChange={(val) =>
+                  val && run(() => addUserRole(user.id, val), "Đã thêm vai trò.")
+                }
+                maw={260}
+              />
+
+              <Text size="sm" fw={600} mt="md" mb={6}>
+                Quyền trực tiếp
+              </Text>
+              <Group gap="xs">
+                {user.directPermissions.length === 0 && (
+                  <Text size="sm" c="dimmed">
+                    Không có quyền trực tiếp
+                  </Text>
+                )}
+                {user.directPermissions.map((perm) => (
+                  <Pill
+                    key={perm}
+                    withRemoveButton
+                    onRemove={() =>
+                      run(
+                        () => removeUserPermission(user.id, perm),
+                        "Đã gỡ quyền."
+                      )
+                    }
+                  >
+                    {permissionLabel(perm)}
+                  </Pill>
+                ))}
+              </Group>
+              <Select
+                mt="xs"
+                placeholder="Thêm quyền..."
+                searchable
+                data={permissionOptions
+                  .filter((p) => !user.directPermissions.includes(p))
+                  .map((p) => ({ value: p, label: permissionLabel(p) }))}
+                value={null}
+                onChange={(val) =>
+                  val && run(() => addUserPermission(user.id, val), "Đã thêm quyền.")
+                }
+                maw={260}
+              />
+            </Card>
+          ))}
+        </Stack>
+      )}
+
+      <Modal opened={opened} onClose={close} title="Thêm người dùng" centered>
+        <form onSubmit={handleCreate}>
+          <Stack>
+            <TextInput label="Email" required {...form.getInputProps("email")} />
+            <PasswordInput label="Mật khẩu" required {...form.getInputProps("password")} />
+            <Switch
+              label="Phê duyệt ngay"
+              {...form.getInputProps("isAdminApproved", { type: "checkbox" })}
+            />
+            <Group justify="flex-end" mt="sm">
+              <Button variant="default" onClick={close} disabled={saving}>
+                Hủy
+              </Button>
+              <Button type="submit" loading={saving}>
+                Tạo
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+    </>
   );
 }

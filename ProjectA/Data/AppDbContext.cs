@@ -14,6 +14,20 @@ namespace ProjectA.Data
 
         public DbSet<Product> Products => Set<Product>();
 
+        public DbSet<Court> Courts => Set<Court>();
+
+        public DbSet<Customer> Customers => Set<Customer>();
+
+        public DbSet<Booking> Bookings => Set<Booking>();
+
+        public DbSet<Supply> Supplies => Set<Supply>();
+
+        public DbSet<Order> Orders => Set<Order>();
+
+        public DbSet<Payment> Payments => Set<Payment>();
+
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -26,6 +40,104 @@ namespace ProjectA.Data
 
                 entity.Property(p => p.Price)
                     .HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<Court>(entity =>
+            {
+                entity.Property(c => c.Name).HasMaxLength(100).IsRequired();
+                entity.Property(c => c.Zone).HasMaxLength(100);
+                entity.Property(c => c.Type).HasMaxLength(30);
+                entity.Property(c => c.ImageUrl).HasMaxLength(500);
+                entity.Property(c => c.Status).HasMaxLength(30);
+                entity.Property(c => c.Note).HasMaxLength(500);
+
+                // Bảng giá theo khung giờ lưu thành cột JSON (jsonb).
+                entity.OwnsMany(c => c.PriceSlots, slots =>
+                {
+                    slots.ToJson();
+                    slots.Property(s => s.PricePerHour).HasColumnType("numeric(18,2)");
+                });
+            });
+
+            builder.Entity<Customer>(entity =>
+            {
+                entity.Property(c => c.Name).HasMaxLength(120).IsRequired();
+                entity.Property(c => c.Phone).HasMaxLength(20).IsRequired();
+                entity.Property(c => c.Email).HasMaxLength(200);
+                entity.Property(c => c.Note).HasMaxLength(1000);
+                entity.Property(c => c.JoinedAt).HasMaxLength(10);
+                entity.Property(c => c.Debt).HasColumnType("numeric(18,2)");
+                // Tags: collection chuỗi -> jsonb (EF Core 8 primitive collection).
+                entity.Property(c => c.Tags).HasColumnType("jsonb");
+                entity.HasIndex(c => c.Phone);
+            });
+
+            builder.Entity<Booking>(entity =>
+            {
+                entity.Property(b => b.Code).HasMaxLength(20).IsRequired();
+                entity.Property(b => b.CustomerName).HasMaxLength(120);
+                entity.Property(b => b.CustomerPhone).HasMaxLength(20);
+                entity.Property(b => b.CourtName).HasMaxLength(100);
+                entity.Property(b => b.Date).HasMaxLength(10);
+                entity.Property(b => b.StartTime).HasMaxLength(5);
+                entity.Property(b => b.EndTime).HasMaxLength(5);
+                entity.Property(b => b.Status).HasMaxLength(20);
+                entity.Property(b => b.CancelReason).HasMaxLength(500);
+                entity.Property(b => b.TotalPrice).HasColumnType("numeric(18,2)");
+                entity.HasIndex(b => b.Date);
+            });
+
+            builder.Entity<Supply>(entity =>
+            {
+                entity.Property(s => s.Name).HasMaxLength(200).IsRequired();
+                entity.Property(s => s.Category).HasMaxLength(50);
+                entity.Property(s => s.Unit).HasMaxLength(20);
+                entity.Property(s => s.SalePrice).HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<Order>(entity =>
+            {
+                entity.Property(o => o.Code).HasMaxLength(20).IsRequired();
+                entity.Property(o => o.CustomerName).HasMaxLength(120);
+                entity.Property(o => o.CourtName).HasMaxLength(100);
+                entity.Property(o => o.Total).HasColumnType("numeric(18,2)");
+                entity.OwnsMany(o => o.Lines, lines =>
+                {
+                    lines.ToJson();
+                    lines.Property(l => l.UnitPrice).HasColumnType("numeric(18,2)");
+                });
+            });
+
+            builder.Entity<Payment>(entity =>
+            {
+                entity.Property(p => p.Code).HasMaxLength(20).IsRequired();
+                entity.Property(p => p.Source).HasMaxLength(20);
+                entity.Property(p => p.RefId).HasMaxLength(50);
+                entity.Property(p => p.RefCode).HasMaxLength(20);
+                entity.Property(p => p.CustomerName).HasMaxLength(120);
+                entity.Property(p => p.Method).HasMaxLength(20);
+                entity.Property(p => p.Status).HasMaxLength(20);
+                entity.Property(p => p.Note).HasMaxLength(500);
+                entity.Property(p => p.Amount).HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<RefreshToken>(entity =>
+            {
+                entity.HasKey(t => t.Id);
+
+                entity.Property(t => t.Token)
+                    .HasMaxLength(200)
+                    .IsRequired();
+
+                entity.HasIndex(t => t.Token)
+                    .IsUnique();
+
+                entity.HasIndex(t => t.UserId);
+
+                entity.HasOne(t => t.User)
+                    .WithMany()
+                    .HasForeignKey(t => t.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

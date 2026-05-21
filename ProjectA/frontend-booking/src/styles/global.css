@@ -1,0 +1,84 @@
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hiệu ứng nâng nhẹ khi hover — dùng cho card có thể tương tác. */
+.hover-lift {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--mantine-shadow-lg);
+}
+
+/* Chữ gradient thương hiệu — tông ôn hòa. */
+.gradient-text {
+  background: linear-gradient(135deg, #1f9d6b, #2faa77);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ===== Loader ===== */
+.app-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Vòng gradient xoay mượt + đốm tâm nảy nhẹ. */
+.app-loader__ring {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 90deg,
+    rgba(31, 157, 107, 0) 0%,
+    rgba(31, 157, 107, 0.25) 35%,
+    #1f9d6b 80%,
+    #2faa77 100%
+  );
+  -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 6px), #000 0);
+  mask: radial-gradient(farthest-side, #0000 calc(100% - 6px), #000 0);
+  animation: app-spin 0.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.app-loader__dot {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mantine-color-accent-6);
+  animation: app-pulse 0.9s ease-in-out infinite;
+}
+
+.app-loader__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+  letter-spacing: 0.2px;
+}
+
+@keyframes app-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes app-pulse {
+  0%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

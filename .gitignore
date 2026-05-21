@@ -361,3 +361,10 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Claude Code local project files
+.claude/
+
+# Frontend build artifacts (per-app .gitignore also covers these)
+ProjectA/frontend/dist/
+ProjectA/frontend-booking/dist/
+**/*.tsbuildinfo

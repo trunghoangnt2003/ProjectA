@@ -1,132 +1,109 @@
-import { useState } from "react";
-import type { AdminUser, Product, Role } from "../types";
-import { ErrorAlert } from "../components/common/ErrorAlert";
-import { ProductSection } from "../components/products/ProductSection";
-import { RoleSection } from "../components/roles/RoleSection";
-import { UserSection } from "../components/users/UserSection";
+import { lazy, Suspense, useMemo, type ComponentType } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Center, Loader, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { IconLock } from "@tabler/icons-react";
+import { AppLayout } from "../components/layout/AppLayout";
+import { NAV_GROUPS, NAV_TITLES, MODULE_PERMISSION } from "../config/navigation";
+import { usePermissions } from "../hooks/usePermissions";
 
-type TabKey = "products" | "users" | "roles";
+// Lazy-load từng trang để chia nhỏ bundle (chỉ tải khi mở module đó).
+const named = <T extends object>(
+  loader: () => Promise<Record<string, ComponentType>>,
+  key: string
+) => lazy(() => loader().then((m) => ({ default: m[key] as ComponentType<T> })));
+
+const PAGES: Record<string, ComponentType> = {
+  overview: named(() => import("./OverviewPage"), "OverviewPage"),
+  reports: named(() => import("../components/reports/ReportsSection"), "ReportsSection"),
+  courts: named(() => import("../components/courts/CourtSection"), "CourtSection"),
+  bookings: named(() => import("../components/bookings/BookingSection"), "BookingSection"),
+  schedule: named(() => import("../components/schedule/SchedulePage"), "SchedulePage"),
+  customers: named(() => import("../components/customers/CustomerSection"), "CustomerSection"),
+  sales: named(() => import("../components/sales/SaleSection"), "SaleSection"),
+  orders: named(() => import("../components/orders/OrderHistorySection"), "OrderHistorySection"),
+  payments: named(() => import("../components/payments/PaymentSection"), "PaymentSection"),
+  products: named(() => import("../components/products/ProductSection"), "ProductSection"),
+  supplies: named(() => import("../components/supplies/SupplySection"), "SupplySection"),
+  combos: named(() => import("../components/combos/ComboSection"), "ComboSection"),
+  inventory: named(() => import("../components/inventory/InventorySection"), "InventorySection"),
+  rentals: named(() => import("../components/rentals/RentalSection"), "RentalSection"),
+  promotions: named(() => import("../components/promotions/PromotionSection"), "PromotionSection"),
+  memberships: named(() => import("../components/memberships/MembershipSection"), "MembershipSection"),
+  notifications: named(() => import("../components/notifications/NotificationSection"), "NotificationSection"),
+  users: named(() => import("../components/users/UserSection"), "UserSection"),
+  roles: named(() => import("../components/roles/RoleSection"), "RoleSection"),
+  employees: named(() => import("../components/employees/EmployeeSection"), "EmployeeSection"),
+  roster: named(() => import("../components/workforce/RosterSection"), "RosterSection"),
+  attendance: named(() => import("../components/workforce/AttendanceSection"), "AttendanceSection"),
+  payroll: named(() => import("../components/workforce/PayrollSection"), "PayrollSection"),
+};
 
 interface DashboardPageProps {
-  error: string | null;
-  products: Product[];
-  roles: Role[];
-  users: AdminUser[];
+  userEmail?: string;
   onLogout: () => void;
-  onReloadProducts: () => Promise<void>;
-  onReloadRoles: () => Promise<void>;
-  onReloadUsers: () => Promise<void>;
-  onClearError: () => void;
-  onError: (err: unknown) => void;
 }
 
-export function DashboardPage({
-  error,
-  products,
-  roles,
-  users,
-  onLogout,
-  onReloadProducts,
-  onReloadRoles,
-  onReloadUsers,
-  onClearError,
-  onError
-}: DashboardPageProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("products");
-  const setTab = (tab: TabKey) => {
-    onClearError();
-    setActiveTab(tab);
-  };
+export function DashboardPage({ userEmail, onLogout }: DashboardPageProps) {
+  const { can } = usePermissions();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const activeTitle =
-    activeTab === "products"
-      ? "Products"
-      : activeTab === "users"
-        ? "Users"
-        : "Roles";
+  // Module đang mở suy ra từ URL (vd "/courts" -> "courts").
+  const activeKey = location.pathname.split("/")[1] || "overview";
+
+  // Chỉ hiện menu mà user có quyền; bỏ nhóm rỗng.
+  const visibleGroups = useMemo(
+    () =>
+      NAV_GROUPS.map((g) => ({
+        ...g,
+        items: g.items.filter((i) => can(i.permission)),
+      })).filter((g) => g.items.length > 0),
+    [can]
+  );
 
   return (
-    <div className="min-vh-100 bg-light">
-      <div className="d-flex">
-        <aside
-          className="bg-white border-end"
-          style={{ width: 260, minHeight: "100vh" }}
-        >
-          <div className="p-3 border-bottom fw-semibold">ProjectA Admin</div>
-          <div className="nav flex-column nav-pills p-3 gap-2">
-            <button
-              className={`nav-link text-start ${
-                activeTab === "products" ? "active" : "text-dark"
-              }`}
-              onClick={() => setTab("products")}
-            >
-              Products
-            </button>
-            <button
-              className={`nav-link text-start ${
-                activeTab === "users" ? "active" : "text-dark"
-              }`}
-              onClick={() => setTab("users")}
-            >
-              Users
-            </button>
-            <button
-              className={`nav-link text-start ${
-                activeTab === "roles" ? "active" : "text-dark"
-              }`}
-              onClick={() => setTab("roles")}
-            >
-              Roles
-            </button>
-          </div>
-        </aside>
+    <AppLayout
+      navGroups={visibleGroups}
+      activeKey={activeKey}
+      onNavigate={(key) => navigate(`/${key}`)}
+      userEmail={userEmail}
+      onLogout={onLogout}
+      title={NAV_TITLES[activeKey] ?? "Tổng quan"}
+    >
+      <Suspense
+        fallback={
+          <Center mih="60vh">
+            <Loader />
+          </Center>
+        }
+      >
+        <Routes>
+          <Route path="/" element={<Navigate to="/overview" replace />} />
+          {Object.entries(PAGES).map(([key, Page]) => (
+            <Route
+              key={key}
+              path={`/${key}`}
+              element={can(MODULE_PERMISSION[key]) ? <Page /> : <AccessDenied />}
+            />
+          ))}
+          <Route path="*" element={<Navigate to="/overview" replace />} />
+        </Routes>
+      </Suspense>
+    </AppLayout>
+  );
+}
 
-        <main className="flex-grow-1">
-          <div className="bg-white border-bottom">
-            <div className="d-flex justify-content-between align-items-center px-4 py-3">
-              <div>
-                <div className="text-muted small">Admin Dashboard</div>
-                <h4 className="mb-0">{activeTitle}</h4>
-              </div>
-              <button className="btn btn-outline-secondary" onClick={onLogout}>
-                Logout
-              </button>
-            </div>
-          </div>
-
-          <div className="p-4">
-            <ErrorAlert message={error} />
-
-            {activeTab === "products" && (
-              <ProductSection
-                products={products}
-                onReload={onReloadProducts}
-                onClearError={onClearError}
-                onError={onError}
-              />
-            )}
-
-            {activeTab === "users" && (
-              <UserSection
-                users={users}
-                roles={roles}
-                onReloadUsers={onReloadUsers}
-                onClearError={onClearError}
-                onError={onError}
-              />
-            )}
-
-            {activeTab === "roles" && (
-              <RoleSection
-                roles={roles}
-                onReloadRoles={onReloadRoles}
-                onClearError={onClearError}
-                onError={onError}
-              />
-            )}
-          </div>
-        </main>
-      </div>
-    </div>
+/** Hiển thị khi user mở module không có quyền (an toàn cả khi điều hướng trực tiếp). */
+function AccessDenied() {
+  return (
+    <Stack align="center" justify="center" gap="sm" mih="60vh">
+      <ThemeIcon size={56} radius="xl" variant="light" color="gray">
+        <IconLock size={28} />
+      </ThemeIcon>
+      <Title order={4}>Không có quyền truy cập</Title>
+      <Text c="dimmed" size="sm" ta="center" maw={420}>
+        Bạn không được cấp quyền cho mục này. Liên hệ quản trị viên nếu cần truy cập.
+      </Text>
+    </Stack>
   );
 }

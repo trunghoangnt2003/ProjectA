@@ -1,23 +1,17 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Options;
 using ProjectA.Models;
-using ProjectA.Options;
 
 namespace ProjectA.Authorization
 {
     public class BusinessHoursApprovalHandler : AuthorizationHandler<BusinessHoursApprovalRequirement>
     {
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly BusinessHoursOptions _options;
 
-        public BusinessHoursApprovalHandler(
-            UserManager<ApplicationUser> userManager,
-            IOptions<BusinessHoursOptions> options)
+        public BusinessHoursApprovalHandler(UserManager<ApplicationUser> userManager)
         {
             _userManager = userManager;
-            _options = options.Value;
         }
 
         protected override async Task HandleRequirementAsync(
@@ -44,10 +38,18 @@ namespace ProjectA.Authorization
                 return;
             }
 
-            var now = TimeOnly.FromDateTime(DateTime.Now);
-            var start = _options.Start;
-            var end = _options.End;
+            if (!WorkShifts.TryGet(user.Shift, out var shift))
+            {
+                context.Fail(new AuthorizationFailureReason(this, "Nhân viên chưa được phân ca làm việc."));
+                return;
+            }
 
+            var now = TimeOnly.FromDateTime(DateTime.Now);
+            var start = shift.Start;
+            var end = shift.End;
+
+            // Logic giữ nguyên như rule giờ hành chính cũ; chỉ đổi nguồn khung giờ sang ca làm.
+            // Start > End => ca qua nửa đêm (vd S2 17:00–24:00).
             var within = start <= end
                 ? now >= start && now <= end
                 : now >= start || now <= end;
@@ -58,7 +60,7 @@ namespace ProjectA.Authorization
                 return;
             }
 
-            context.Fail(new AuthorizationFailureReason(this, "Access allowed only during business hours."));
+            context.Fail(new AuthorizationFailureReason(this, "Chỉ được thao tác trong ca làm việc của bạn."));
         }
     }
 }

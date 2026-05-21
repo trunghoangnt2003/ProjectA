@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,16 +25,8 @@ namespace ProjectA.Controllers
         {
             var products = await _dbContext.Products
                 .AsNoTracking()
-                .OrderByDescending(p => p.CreatedAtUtc)
-                .Select(p => new ProductDto
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    Description = p.Description,
-                    Price = p.Price,
-                    CreatedAtUtc = p.CreatedAtUtc,
-                    CreatedByUserId = p.CreatedByUserId
-                })
+                .OrderBy(p => p.Name)
+                .Select(p => ToDto(p))
                 .ToListAsync();
 
             return Ok(products);
@@ -48,15 +39,7 @@ namespace ProjectA.Controllers
             var product = await _dbContext.Products
                 .AsNoTracking()
                 .Where(p => p.Id == id)
-                .Select(p => new ProductDto
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    Description = p.Description,
-                    Price = p.Price,
-                    CreatedAtUtc = p.CreatedAtUtc,
-                    CreatedByUserId = p.CreatedByUserId
-                })
+                .Select(p => ToDto(p))
                 .FirstOrDefaultAsync();
 
             if (product is null)
@@ -71,34 +54,19 @@ namespace ProjectA.Controllers
         [Authorize(Policy = Policies.ProductAdd)]
         public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductRequest request)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrWhiteSpace(userId))
-            {
-                return Unauthorized();
-            }
-
             var product = new Product
             {
                 Id = Guid.NewGuid(),
                 Name = request.Name,
-                Description = request.Description,
+                Category = request.Category,
                 Price = request.Price,
-                CreatedAtUtc = DateTime.UtcNow,
-                CreatedByUserId = Guid.Parse(userId)
+                Stock = request.Stock
             };
 
             _dbContext.Products.Add(product);
             await _dbContext.SaveChangesAsync();
 
-            return Ok(new ProductDto
-            {
-                Id = product.Id,
-                Name = product.Name,
-                Description = product.Description,
-                Price = product.Price,
-                CreatedAtUtc = product.CreatedAtUtc,
-                CreatedByUserId = product.CreatedByUserId
-            });
+            return CreatedAtAction(nameof(GetById), new { id = product.Id }, ToDto(product));
         }
 
         [HttpPut("{id:guid}")]
@@ -112,20 +80,13 @@ namespace ProjectA.Controllers
             }
 
             product.Name = request.Name;
-            product.Description = request.Description;
+            product.Category = request.Category;
             product.Price = request.Price;
+            product.Stock = request.Stock;
 
             await _dbContext.SaveChangesAsync();
 
-            return Ok(new ProductDto
-            {
-                Id = product.Id,
-                Name = product.Name,
-                Description = product.Description,
-                Price = product.Price,
-                CreatedAtUtc = product.CreatedAtUtc,
-                CreatedByUserId = product.CreatedByUserId
-            });
+            return Ok(ToDto(product));
         }
 
         [HttpDelete("{id:guid}")]
@@ -142,5 +103,14 @@ namespace ProjectA.Controllers
             await _dbContext.SaveChangesAsync();
             return NoContent();
         }
+
+        private static ProductDto ToDto(Product p) => new()
+        {
+            Id = p.Id,
+            Name = p.Name,
+            Category = p.Category,
+            Price = p.Price,
+            Stock = p.Stock
+        };
     }
 }
