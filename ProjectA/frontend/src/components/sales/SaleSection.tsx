@@ -7,6 +7,7 @@ import {
   Card,
   Divider,
   Group,
+  Modal,
   ScrollArea,
   Select,
   SimpleGrid,
@@ -15,6 +16,7 @@ import {
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
 import {
   IconSearch,
   IconPlus,
@@ -28,21 +30,31 @@ import { supplyService } from "../../services/supplyService";
 import { courtService } from "../../services/courtService";
 import { orderService } from "../../services/orderService";
 import { comboService } from "../../services/comboService";
+import { rentalService } from "../../services/rentalService";
 import type { Combo, Court, OrderLine, Product, Supply } from "../../types/domain";
 import { formatVnd } from "../../lib/format";
 import { toMessage, notify } from "../../lib/notify";
 
-/** Một mặt hàng bán được — gộp Hàng hóa, Vật tư bán và Combo về cùng một dạng. */
+/** Một mặt hàng bán được — gộp Hàng hóa, Vật tư bán, Combo và Thuê đồ về cùng một dạng. */
 interface Sellable {
   key: string; // `${source}:${id}` — định danh trong giỏ
   id: string;
-  source: "product" | "supply" | "combo";
+  source: "product" | "supply" | "combo" | "rental";
   name: string;
   category: string;
   price: number;
-  stock: number; // tồn còn bán được
+  stock: number; // tồn còn bán/cho thuê được
   unit?: string;
+  rentalValue?: number; // chỉ source "rental" — tính cọc = 1/2 giá trị món
 }
+
+/** Vật tư cho thuê = vật tư sân nhóm Vợt/Giày đã cấu hình giá thuê. */
+const isRentable = (s: Supply) =>
+  !s.forSale && s.rentalPrice != null && (s.category === "Vợt" || s.category === "Giày");
+
+/** Cọc giữ cho một dòng thuê = 1/2 giá trị món × số lượng. */
+const depositOf = (item: Sellable, qty: number) =>
+  item.source === "rental" ? Math.round((item.rentalValue ?? 0) / 2) * qty : 0;
 
 /** Tồn còn bán của một combo = số bộ tối đa lắp được từ tồn thành phần. */
 function comboStock(combo: Combo, products: Product[], supplies: Supply[]): number {
@@ -92,7 +104,19 @@ function buildCatalog(products: Product[], supplies: Supply[], combos: Combo[]):
       price: c.price,
       stock: comboStock(c, products, supplies),
     }));
-  return [...fromCombos, ...fromProducts, ...fromSupplies];
+  // Vật tư cho thuê (vợt/giày) — bán theo giá thuê, kèm thu cọc khi thanh toán.
+  const fromRentals: Sellable[] = supplies.filter(isRentable).map((s) => ({
+    key: `rental:${s.id}`,
+    id: s.id,
+    source: "rental",
+    name: `Thuê ${s.name}`,
+    category: "Thuê đồ",
+    price: s.rentalPrice as number,
+    stock: s.quantity,
+    unit: s.unit,
+    rentalValue: s.rentalValue,
+  }));
+  return [...fromCombos, ...fromRentals, ...fromProducts, ...fromSupplies];
 }
 
 export function SaleSection() {
@@ -108,6 +132,7 @@ export function SaleSection() {
   const [customerName, setCustomerName] = useState("");
   const [courtName, setCourtName] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [confirmOpen, { open: openConfirm, close: closeConfirm }] = useDisclosure(false);
 
   const load = () => {
     setLoading(true);
@@ -138,6 +163,12 @@ export function SaleSection() {
     return m;
   }, [catalog]);
 
+  const comboById = useMemo(() => {
+    const m: Record<string, Combo> = {};
+    for (const c of combos) m[c.id] = c;
+    return m;
+  }, [combos]);
+
   const categories = useMemo(
     () => Array.from(new Set(catalog.map((c) => c.category))).sort(),
     [catalog]
@@ -161,6 +192,7 @@ export function SaleSection() {
   );
 
   const total = cartLines.reduce((sum, l) => sum + l.item.price * l.qty, 0);
+  const depositTotal = cartLines.reduce((sum, l) => sum + depositOf(l.item, l.qty), 0);
 
   const addToCart = (item: Sellable) => {
     setCart((prev) => {
@@ -190,16 +222,20 @@ export function SaleSection() {
     setCourtName(null);
   };
 
-  const checkout = async () => {
+  /** Bước 1: kiểm tra tồn rồi mở hộp xác nhận hóa đơn. */
+  const reviewOrder = () => {
     if (cartLines.length === 0) return;
-    // Chốt lại tồn kho trước khi trừ (tránh bán quá số lượng).
     for (const { item, qty } of cartLines) {
       if (qty > item.stock) {
         notify.error(`"${item.name}" không đủ tồn (còn ${item.stock}).`);
         return;
       }
     }
+    openConfirm();
+  };
 
+  /** Bước 2: chốt thanh toán — trừ kho, tạo hóa đơn & phiếu thuê. */
+  const confirmCheckout = async () => {
     setPaying(true);
     try {
       // Gom nhu cầu trừ kho theo từng mặt hàng (combo nở ra thành phần).
@@ -210,9 +246,9 @@ export function SaleSection() {
 
       for (const { item, qty } of cartLines) {
         if (item.source === "product") addP(item.id, qty);
-        else if (item.source === "supply") addS(item.id, qty);
+        else if (item.source === "supply" || item.source === "rental") addS(item.id, qty);
         else {
-          const combo = combos.find((c) => c.id === item.id);
+          const combo = comboById[item.id];
           for (const line of combo?.lines ?? []) {
             if (line.source === "product") addP(line.refId, line.quantity * qty);
             else addS(line.refId, line.quantity * qty);
@@ -235,6 +271,7 @@ export function SaleSection() {
         }
       }
 
+      const now = new Date().toISOString();
       const lines: OrderLine[] = cartLines.map(({ item, qty }) => ({
         refId: item.id,
         source: item.source,
@@ -244,14 +281,38 @@ export function SaleSection() {
       }));
       await orderService.create({
         code: "HD-" + Math.floor(1000 + Math.random() * 9000),
-        createdAt: new Date().toISOString(),
+        createdAt: now,
         customerName: customerName.trim() || undefined,
         courtName: courtName ?? undefined,
         lines,
         total,
+        deposit: depositTotal || undefined,
       });
 
-      notify.success(`Đã thanh toán ${formatVnd(total)}.`);
+      // Mỗi dòng thuê → tạo phiếu thuê để màn Thuê đồ theo dõi nhận trả & hoàn cọc.
+      for (const { item, qty } of cartLines) {
+        if (item.source !== "rental") continue;
+        const supply = supplies.find((s) => s.id === item.id);
+        await rentalService.create({
+          code: "TH-" + Math.floor(5000 + Math.random() * 4000),
+          itemId: item.id,
+          itemName: supply?.name ?? item.name.replace(/^Thuê /, ""),
+          customerName: customerName.trim() || "Khách lẻ",
+          quantity: qty,
+          fee: item.price * qty,
+          deposit: depositOf(item, qty),
+          borrowedAt: now,
+          status: "borrowed",
+          note: courtName ? `POS · ${courtName}` : "POS",
+        });
+      }
+
+      notify.success(
+        depositTotal > 0
+          ? `Đã thanh toán ${formatVnd(total)} · giữ cọc ${formatVnd(depositTotal)}.`
+          : `Đã thanh toán ${formatVnd(total)}.`
+      );
+      closeConfirm();
       clearCart();
       load(); // tải lại tồn kho mới
     } catch (err) {
@@ -265,19 +326,19 @@ export function SaleSection() {
     <>
       <PageHeader
         title="Bán hàng"
-        subtitle="Tính bill đồ uống, đồ ăn, cầu, cước… — trừ kho và tính vào doanh thu"
+        subtitle="Tính bill đồ uống, đồ ăn, cầu, thuê đồ… — trừ kho và tính vào doanh thu"
       />
 
       <Group align="flex-start" gap="lg" wrap="wrap">
         {/* Catalog */}
-        <Box style={{ flex: 1, minWidth: 320 }}>
+        <Box style={{ flex: "3 1 360px", minWidth: 0 }}>
           <Group mb="md" gap="sm" wrap="wrap">
             <TextInput
               placeholder="Tìm hàng hóa…"
               leftSection={<IconSearch size={16} />}
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
-              style={{ flex: 1, minWidth: 200 }}
+              style={{ flex: 1, minWidth: 160 }}
             />
             <Select
               w={170}
@@ -356,7 +417,7 @@ export function SaleSection() {
         </Box>
 
         {/* Giỏ hàng / hóa đơn */}
-        <Box style={{ width: 340, flexShrink: 0 }}>
+        <Box style={{ flex: "1 1 300px", minWidth: 0 }}>
           <Card withBorder shadow="sm" style={{ position: "sticky", top: 16 }}>
             <Group gap="xs" mb="sm">
               <IconShoppingCart size={20} />
@@ -396,60 +457,92 @@ export function SaleSection() {
             ) : (
               <ScrollArea.Autosize mah={300} mb="sm">
                 <Stack gap="xs">
-                  {cartLines.map(({ item, qty }) => (
-                    <Group key={item.key} gap="xs" wrap="nowrap" align="flex-start">
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <Text size="sm" fw={500} lineClamp={1}>
-                          {item.name}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {formatVnd(item.price)} × {qty}
-                        </Text>
-                      </div>
-                      <Group gap={2} wrap="nowrap">
-                        <ActionIcon
-                          size="sm"
-                          variant="default"
-                          onClick={() => setQty(item.key, qty - 1)}
-                          aria-label="Giảm"
-                        >
-                          <IconMinus size={14} />
-                        </ActionIcon>
-                        <Text size="sm" w={20} ta="center">
-                          {qty}
-                        </Text>
-                        <ActionIcon
-                          size="sm"
-                          variant="default"
-                          onClick={() => setQty(item.key, qty + 1)}
-                          disabled={qty >= item.stock}
-                          aria-label="Tăng"
-                        >
-                          <IconPlus size={14} />
-                        </ActionIcon>
-                        <ActionIcon
-                          size="sm"
-                          variant="subtle"
-                          color="red"
-                          onClick={() => setQty(item.key, 0)}
-                          aria-label="Xóa"
-                        >
-                          <IconTrash size={14} />
-                        </ActionIcon>
+                  {cartLines.map(({ item, qty }) => {
+                    const combo = item.source === "combo" ? comboById[item.id] : undefined;
+                    const dep = depositOf(item, qty);
+                    return (
+                      <Group key={item.key} gap="xs" wrap="nowrap" align="flex-start">
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Text size="sm" fw={500} lineClamp={1}>
+                            {item.name}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {formatVnd(item.price)} × {qty}
+                          </Text>
+                          {/* Combo: hiện món bên trong */}
+                          {combo && (
+                            <Text size="xs" c="dimmed" lineClamp={2}>
+                              Gồm: {combo.lines.map((l) => `${l.quantity * qty}× ${l.name}`).join(", ")}
+                            </Text>
+                          )}
+                          {/* Thuê đồ: hiện cọc giữ */}
+                          {dep > 0 && (
+                            <Text size="xs" c="grape">
+                              Cọc giữ: {formatVnd(dep)}
+                            </Text>
+                          )}
+                        </div>
+                        <Group gap={2} wrap="nowrap">
+                          <ActionIcon
+                            size="sm"
+                            variant="default"
+                            onClick={() => setQty(item.key, qty - 1)}
+                            aria-label="Giảm"
+                          >
+                            <IconMinus size={14} />
+                          </ActionIcon>
+                          <Text size="sm" w={20} ta="center">
+                            {qty}
+                          </Text>
+                          <ActionIcon
+                            size="sm"
+                            variant="default"
+                            onClick={() => setQty(item.key, qty + 1)}
+                            disabled={qty >= item.stock}
+                            aria-label="Tăng"
+                          >
+                            <IconPlus size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            color="red"
+                            onClick={() => setQty(item.key, 0)}
+                            aria-label="Xóa"
+                          >
+                            <IconTrash size={14} />
+                          </ActionIcon>
+                        </Group>
                       </Group>
-                    </Group>
-                  ))}
+                    );
+                  })}
                 </Stack>
               </ScrollArea.Autosize>
             )}
 
             <Divider mb="xs" />
-            <Group justify="space-between" mb="md">
+            <Group justify="space-between" mb={depositTotal > 0 ? 4 : "md"}>
               <Text fw={600}>Tổng cộng</Text>
               <Text fw={700} size="lg" c="brand">
                 {formatVnd(total)}
               </Text>
             </Group>
+            {depositTotal > 0 && (
+              <>
+                <Group justify="space-between" mb={4}>
+                  <Text size="sm" c="dimmed">
+                    Cọc giữ (hoàn khi trả)
+                  </Text>
+                  <Text size="sm" c="grape" fw={600}>
+                    {formatVnd(depositTotal)}
+                  </Text>
+                </Group>
+                <Group justify="space-between" mb="md">
+                  <Text fw={600}>Khách trả</Text>
+                  <Text fw={700}>{formatVnd(total + depositTotal)}</Text>
+                </Group>
+              </>
+            )}
 
             <Group grow>
               <Button
@@ -459,17 +552,105 @@ export function SaleSection() {
               >
                 Xóa giỏ
               </Button>
-              <Button
-                onClick={checkout}
-                loading={paying}
-                disabled={cartLines.length === 0}
-              >
+              <Button onClick={reviewOrder} disabled={cartLines.length === 0}>
                 Thanh toán
               </Button>
             </Group>
           </Card>
         </Box>
       </Group>
+
+      {/* Hộp xác nhận hóa đơn trước khi thanh toán */}
+      <Modal
+        opened={confirmOpen}
+        onClose={closeConfirm}
+        title="Xác nhận hóa đơn"
+        centered
+        size="lg"
+      >
+        <Stack gap="sm">
+          {(customerName.trim() || courtName) && (
+            <Text size="sm" c="dimmed">
+              {customerName.trim() || "Khách lẻ"}
+              {courtName ? ` · ${courtName}` : ""}
+            </Text>
+          )}
+
+          <Stack gap="xs">
+            {cartLines.map(({ item, qty }) => {
+              const combo = item.source === "combo" ? comboById[item.id] : undefined;
+              const dep = depositOf(item, qty);
+              return (
+                <Box key={item.key}>
+                  <Group justify="space-between" wrap="nowrap" align="flex-start">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="sm" fw={500}>
+                        {item.name}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {formatVnd(item.price)} × {qty}
+                      </Text>
+                    </div>
+                    <Text size="sm" fw={600}>
+                      {formatVnd(item.price * qty)}
+                    </Text>
+                  </Group>
+                  {/* Combo: liệt kê món bên trong */}
+                  {combo && (
+                    <Stack gap={0} pl="md" mt={2}>
+                      {combo.lines.map((l) => (
+                        <Text key={`${l.source}:${l.refId}`} size="xs" c="dimmed">
+                          • {l.quantity * qty}× {l.name}
+                        </Text>
+                      ))}
+                    </Stack>
+                  )}
+                  {/* Thuê đồ: cọc giữ */}
+                  {dep > 0 && (
+                    <Text size="xs" c="grape" pl="md" mt={2}>
+                      Cọc giữ: {formatVnd(dep)} (hoàn khi trả)
+                    </Text>
+                  )}
+                </Box>
+              );
+            })}
+          </Stack>
+
+          <Divider />
+
+          <Group justify="space-between">
+            <Text fw={600}>Tổng tiền (doanh thu)</Text>
+            <Text fw={700} c="brand">
+              {formatVnd(total)}
+            </Text>
+          </Group>
+          {depositTotal > 0 && (
+            <>
+              <Group justify="space-between">
+                <Text c="dimmed">Cọc giữ (hoàn khi trả)</Text>
+                <Text c="grape" fw={600}>
+                  {formatVnd(depositTotal)}
+                </Text>
+              </Group>
+              <Group justify="space-between">
+                <Text fw={700}>Khách trả</Text>
+                <Text fw={700} size="lg">
+                  {formatVnd(total + depositTotal)}
+                </Text>
+              </Group>
+            </>
+          )}
+
+          <Group justify="flex-end" mt="sm">
+            <Button variant="default" onClick={closeConfirm} disabled={paying}>
+              Quay lại
+            </Button>
+            <Button onClick={confirmCheckout} loading={paying}>
+              Xác nhận thanh toán
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </>
   );
 }
