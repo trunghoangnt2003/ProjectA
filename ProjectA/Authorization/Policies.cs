@@ -34,5 +34,18 @@ namespace ProjectA.Authorization
         public const string PaymentAdd = "payment.add";
         public const string PaymentEdit = "payment.edit";
         public const string PaymentDelete = "payment.delete";
+
+        public const string ComboManage = "combo.manage";
+        public const string InventoryManage = "inventory.manage";
+        public const string RentalManage = "rental.manage";
+
+        public const string EmployeeManage = "employee.manage";
+        public const string RosterManage = "roster.manage";
+        public const string AttendanceManage = "attendance.manage";
+        public const string PayrollView = "payroll.view";
+
+        public const string PromotionManage = "promotion.manage";
+        public const string MembershipManage = "membership.manage";
+        public const string NotificationManage = "notification.manage";
     }
 }

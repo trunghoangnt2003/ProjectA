@@ -1,77 +1,37 @@
-import type { Payment, PaymentMethod, PaymentStatus, PaymentSource } from "../types/domain";
-import { createMockService } from "./mock/mockClient";
+import type { Payment } from "../types/domain";
+import type { PagedResult, QueryOptions } from "../types";
+import { api } from "./api";
 
-const today = new Date();
-const atDay = (ago: number, h: number, m: number) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() - ago);
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
+export const paymentService = {
+  getAll: async (opts: QueryOptions = {}): Promise<PagedResult<Payment>> => {
+    const params = new URLSearchParams();
+    if (opts.page) params.append("page", opts.page.toString());
+    if (opts.pageSize) params.append("pageSize", opts.pageSize.toString());
+    if (opts.startDate) params.append("startDate", opts.startDate);
+    if (opts.endDate) params.append("endDate", opts.endDate);
+    if (opts.sortBy) params.append("sortBy", opts.sortBy);
+    if (opts.sortDesc !== undefined) params.append("sortDesc", opts.sortDesc.toString());
+    if (opts.search) params.append("search", opts.search);
+
+    const qs = params.toString();
+    return api<PagedResult<Payment>>(`/api/payments${qs ? `?${qs}` : ""}`);
+  },
+
+  create: (input: Omit<Payment, "id">) =>
+    api<Payment>("/api/payments", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  update: (id: string, input: Omit<Payment, "id">) =>
+    api<Payment>(`/api/payments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+
+  delete: (id: string) =>
+    api<void>(`/api/payments/${id}`, { method: "DELETE" }),
 };
-
-/** PRNG có seed để khoản thu mock ổn định giữa các lần load. */
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const rand = mulberry32(424242);
-const pick = <T>(arr: T[]) => arr[Math.floor(rand() * arr.length)];
-
-const CUSTOMERS = [
-  "Nguyễn Văn An", "Trần Thị Bình", "Lê Hoàng Cường", "Phạm Minh Dũng",
-  "Đỗ Thị Em", "Vũ Quốc Phong", "Khách lẻ",
-];
-const METHODS: PaymentMethod[] = ["cash", "qr", "ewallet", "card"];
-const AMOUNTS = [120000, 240000, 260000, 300000, 360000, 500000, 35000, 90000];
-
-function rollStatus(): PaymentStatus {
-  const r = rand();
-  if (r < 0.72) return "paid";
-  if (r < 0.86) return "pending";
-  if (r < 0.94) return "refunded";
-  return "failed";
-}
-
-function generate(days: number): Payment[] {
-  const out: Payment[] = [];
-  let n = 1;
-  let bk = 1006;
-  let hd = 2010;
-  for (let ago = 0; ago <= days; ago++) {
-    const count = 2 + Math.floor(rand() * 5); // 2..6 khoản/ngày
-    for (let i = 0; i < count; i++) {
-      const source: PaymentSource = rand() < 0.6 ? "booking" : "order";
-      const status = rollStatus();
-      const hour = 8 + Math.floor(rand() * 14);
-      const createdAt = atDay(ago, hour, Math.floor(rand() * 60));
-      const refCode = source === "booking" ? `BK-${bk++}` : `HD-${hd++}`;
-      out.push({
-        id: `pt${n}`,
-        code: `PT-${3000 + n}`,
-        source,
-        refId: `${source}-${n}`,
-        refCode,
-        customerName: pick(CUSTOMERS),
-        amount: pick(AMOUNTS),
-        method: pick(METHODS),
-        status,
-        createdAt,
-        paidAt: status === "paid" ? createdAt : undefined,
-      });
-      n++;
-    }
-  }
-  return out;
-}
-
-const seed: Payment[] = generate(14);
-
-export const paymentService = createMockService(seed);
 
 /** Tổng thực thu trong ngày (chỉ khoản đã `paid`). */
 export function paidRevenueOn(payments: Payment[], isoDate: string): number {

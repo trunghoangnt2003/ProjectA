@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Google.Apis.Auth;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using ProjectA.Dtos.Auth;
@@ -16,15 +18,18 @@ namespace ProjectA.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IJwtTokenService _tokenService;
         private readonly GoogleAuthOptions _googleOptions;
+        private readonly IPermissionService _permissionService;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
             IJwtTokenService tokenService,
-            IOptions<GoogleAuthOptions> googleOptions)
+            IOptions<GoogleAuthOptions> googleOptions,
+            IPermissionService permissionService)
         {
             _userManager = userManager;
             _tokenService = tokenService;
             _googleOptions = googleOptions.Value;
+            _permissionService = permissionService;
         }
 
         [HttpPost("signup")]
@@ -154,6 +159,20 @@ namespace ProjectA.Controllers
             }
 
             return NoContent();
+        }
+
+        [HttpGet("me/permissions")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<string>>> GetMyPermissions()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized();
+            }
+
+            var permissions = await _permissionService.GetPermissionsAsync(userId);
+            return Ok(permissions);
         }
 
         private static AuthResponse BuildResponse(AuthTokenResult tokens) => new()

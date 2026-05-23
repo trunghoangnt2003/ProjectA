@@ -18,8 +18,15 @@ export function PermissionProvider({
   permissions: string[];
   children: ReactNode;
 }) {
-  const can = (permission?: string) =>
-    !permission || permissions.includes(permission);
+  const can = (permission?: string) => {
+    if (!permission) return true;
+    if (permissions.includes(permission) || permissions.includes("*")) return true;
+    const parts = permission.split(".");
+    if (parts.length > 1) {
+      return permissions.includes(`${parts[0]}.*`);
+    }
+    return false;
+  };
   return (
     <PermissionContext.Provider value={{ permissions, can }}>
       {children}

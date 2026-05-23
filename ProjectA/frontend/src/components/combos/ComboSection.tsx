@@ -19,7 +19,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconPlus, IconPencil, IconTrash } from "@tabler/icons-react";
 import { PageHeader, DataTable, ConfirmDeleteButton } from "../common";
 import type { DataTableColumn } from "../common";
-import { useCrudResource } from "../../hooks/useCrudResource";
+import { usePagedResource } from "../../hooks/usePagedResource";
 import { comboService } from "../../services/comboService";
 import { productService } from "../../services/productService";
 import { supplyService } from "../../services/supplyService";
@@ -36,7 +36,7 @@ interface CatalogItem {
 }
 
 export function ComboSection() {
-  const { data, loading, create, update, remove } = useCrudResource(comboService, {
+  const { data, loading, create, update, remove, opts, totalPages, totalCount, setPage } = usePagedResource(comboService, {}, {
     created: "Đã tạo combo.",
     updated: "Đã cập nhật combo.",
     removed: "Đã xóa combo.",
@@ -223,6 +223,10 @@ export function ComboSection() {
         rowKey={(cb) => cb.id}
         loading={loading}
         emptyTitle="Chưa có combo nào"
+        page={opts.page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal opened={opened} onClose={close} title={editingId ? "Sửa combo" : "Tạo combo"} centered size="lg">

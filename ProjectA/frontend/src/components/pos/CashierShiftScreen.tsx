@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, Divider, Group, NumberInput, Stack, Table, Text, TextInput } from "@mantine/core";
+import { Badge, Button, Card, Divider, Group, NumberInput, Stack, Text, TextInput } from "@mantine/core";
 import { IconLockOpen, IconLock, IconCash } from "@tabler/icons-react";
 import { cashierShiftService } from "../../services/cashierShiftService";
 import { orderService } from "../../services/orderService";
 import type { CashierShift, Order } from "../../types/domain";
 import { formatVnd, formatDateTime } from "../../lib/format";
 import { toMessage, notify } from "../../lib/notify";
+import { usePagedResource } from "../../hooks/usePagedResource";
+import { DataTable } from "../common";
+import type { DataTableColumn } from "../common";
 
 /** Tổng tiền bán hàng phát sinh trong khoảng [from, to]. */
 function salesBetween(orders: Order[], fromIso: string, toIso: string): number {
@@ -15,18 +18,16 @@ function salesBetween(orders: Order[], fromIso: string, toIso: string): number {
 }
 
 export function CashierShiftScreen() {
-  const [shifts, setShifts] = useState<CashierShift[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const { data: shifts, loading, create, update, page, setPage, totalPages, totalCount } = usePagedResource(
+    cashierShiftService,
+    { created: "Đã mở ca.", updated: "Đã đóng ca." }
+  );
+  
+  const [liveSales, setLiveSales] = useState(0);
   const [cashier, setCashier] = useState("");
   const [openingCash, setOpeningCash] = useState(1000000);
   const [countedCash, setCountedCash] = useState(0);
   const [busy, setBusy] = useState(false);
-
-  const load = () => {
-    cashierShiftService.list().then(setShifts);
-    orderService.list().then(setOrders);
-  };
-  useEffect(load, []);
 
   const openShift = useMemo(() => shifts.find((s) => s.status === "open"), [shifts]);
   const history = useMemo(
@@ -34,22 +35,34 @@ export function CashierShiftScreen() {
     [shifts]
   );
 
-  const liveSales = openShift ? salesBetween(orders, openShift.openedAt, new Date().toISOString()) : 0;
+  useEffect(() => {
+    if (openShift) {
+      orderService.getAll({ startDate: openShift.openedAt.slice(0, 10), pageSize: 1000 })
+        .then(res => {
+          const total = res.items
+            .filter((o) => o.createdAt >= openShift.openedAt)
+            .reduce((s, o) => s + o.total, 0);
+          setLiveSales(total);
+        })
+        .catch(console.error);
+    } else {
+      setLiveSales(0);
+    }
+  }, [openShift]);
+
   const expected = openShift ? openShift.openingCash + liveSales : 0;
 
   const doOpen = async () => {
     if (!cashier.trim()) return notify.error("Nhập tên thu ngân.");
     setBusy(true);
     try {
-      await cashierShiftService.create({
+      await create({
         cashier: cashier.trim(),
         openedAt: new Date().toISOString(),
         openingCash,
         status: "open",
       });
-      notify.success("Đã mở ca.");
       setCashier("");
-      load();
     } catch (err) {
       notify.error(toMessage(err));
     } finally {
@@ -63,22 +76,28 @@ export function CashierShiftScreen() {
     const { id, ...rest } = openShift;
     const diff = countedCash - expected;
     try {
-      await cashierShiftService.update(id, {
+      await update(id, {
         ...rest,
         status: "closed",
         closedAt: new Date().toISOString(),
         countedCash,
         note: diff === 0 ? "Khớp quỹ." : diff > 0 ? `Thừa ${formatVnd(diff)}` : `Thiếu ${formatVnd(-diff)}`,
       });
-      notify.success("Đã đóng ca.");
       setCountedCash(0);
-      load();
     } catch (err) {
       notify.error(toMessage(err));
     } finally {
       setBusy(false);
     }
   };
+
+  const historyColumns: DataTableColumn<CashierShift>[] = [
+    { key: "cashier", header: "Thu ngân", render: (s) => s.cashier },
+    { key: "closedAt", header: "Đóng lúc", render: (s) => s.closedAt ? formatDateTime(s.closedAt) : "—" },
+    { key: "openingCash", header: "Đầu ca", align: "right", render: (s) => formatVnd(s.openingCash) },
+    { key: "countedCash", header: "Kiểm kê", align: "right", render: (s) => s.countedCash != null ? formatVnd(s.countedCash) : "—" },
+    { key: "note", header: "Kết quả", render: (s) => <Text size="sm">{s.note}</Text> },
+  ];
 
   return (
     <Stack maw={680}>
@@ -128,32 +147,17 @@ export function CashierShiftScreen() {
       )}
 
       <Text fw={600} mt="md">Lịch sử ca</Text>
-      <Card p={0} withBorder>
-        <Table verticalSpacing="sm">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Thu ngân</Table.Th>
-              <Table.Th>Đóng lúc</Table.Th>
-              <Table.Th ta="right">Đầu ca</Table.Th>
-              <Table.Th ta="right">Kiểm kê</Table.Th>
-              <Table.Th>Kết quả</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {history.length === 0 ? (
-              <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center" py="md">Chưa có ca đã đóng.</Text></Table.Td></Table.Tr>
-            ) : history.map((s) => (
-              <Table.Tr key={s.id}>
-                <Table.Td>{s.cashier}</Table.Td>
-                <Table.Td>{s.closedAt ? formatDateTime(s.closedAt) : "—"}</Table.Td>
-                <Table.Td ta="right">{formatVnd(s.openingCash)}</Table.Td>
-                <Table.Td ta="right">{s.countedCash != null ? formatVnd(s.countedCash) : "—"}</Table.Td>
-                <Table.Td><Text size="sm">{s.note}</Text></Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Card>
+      <DataTable
+        data={history}
+        columns={historyColumns}
+        rowKey={(s) => s.id}
+        loading={loading}
+        emptyTitle="Chưa có ca đã đóng."
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
+      />
     </Stack>
   );
 }

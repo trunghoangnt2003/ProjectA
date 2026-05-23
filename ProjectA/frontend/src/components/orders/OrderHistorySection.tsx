@@ -33,38 +33,22 @@ function itemCount(o: Order): number {
   return o.lines.reduce((sum, l) => sum + l.quantity, 0);
 }
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 /** Lịch sử bán hàng (POS) — theo dõi các hóa đơn đã thanh toán. */
 export function OrderHistorySection() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const { data: filtered, loading, page, totalPages, totalCount, setPage, setSearch, setDateRange } = usePagedResource(
+    orderService,
+    { startDate: todayIso, endDate: todayIso, sortBy: "date", sortDesc: true }
+  );
+
+  const [searchQuery, setSearchQuery] = useState("");
   const [date, setDate] = useState(todayIso);
   const [detail, setDetail] = useState<Order | null>(null);
 
   useEffect(() => {
-    orderService
-      .list()
-      .then(setOrders)
-      .catch((e) => notify.error(toMessage(e)))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return orders
-      .filter((o) => {
-        if (date && o.createdAt.slice(0, 10) !== date) return false;
-        if (
-          q &&
-          !o.code.toLowerCase().includes(q) &&
-          !(o.customerName ?? "").toLowerCase().includes(q) &&
-          !(o.courtName ?? "").toLowerCase().includes(q)
-        )
-          return false;
-        return true;
-      })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [orders, search, date]);
+    setDateRange(date || undefined, date || undefined);
+  }, [date]);
 
   const totalRevenue = filtered.reduce((sum, o) => sum + o.total, 0);
 
@@ -139,8 +123,12 @@ export function OrderHistorySection() {
             label="Tìm kiếm"
             placeholder="Mã HĐ, khách hoặc sân…"
             leftSection={<IconSearch size={16} />}
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchQuery);
+            }}
+            onBlur={() => setSearch(searchQuery)}
             style={{ flex: 1, minWidth: 220 }}
           />
           <TextInput
@@ -159,6 +147,10 @@ export function OrderHistorySection() {
         loading={loading}
         emptyTitle="Chưa có hóa đơn nào"
         emptyDescription="Hóa đơn tạo ở màn Bán hàng sẽ xuất hiện tại đây."
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal

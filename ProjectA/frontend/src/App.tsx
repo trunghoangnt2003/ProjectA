@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
-import { login } from "./services/authService";
-import { getEffectivePermissions } from "./services/mock/adminMock";
+import { login, getMyPermissions } from "./services/authService";
 import { PermissionProvider } from "./hooks/usePermissions";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -30,13 +29,29 @@ export default function App() {
     localStorage.setItem("permissions", JSON.stringify(perms));
   };
 
+  const refreshPermissions = useCallback(async () => {
+    if (!token) return;
+    try {
+      const perms = await getMyPermissions();
+      applyPermissions(perms);
+    } catch {
+      // Bỏ qua lỗi nếu không lấy được (vd mạng đứt)
+    }
+  }, [token]);
+
   // Khôi phục quyền sau khi refresh nếu còn phiên nhưng chưa có quyền trong cache.
   useEffect(() => {
-    const userId = localStorage.getItem("userId");
-    if (token && permissions.length === 0 && userId) {
-      getEffectivePermissions(userId).then(applyPermissions);
+    if (token && permissions.length === 0) {
+      refreshPermissions();
     }
-  }, [token, permissions.length]);
+  }, [token, permissions.length, refreshPermissions]);
+
+  // Lắng nghe sự kiện auth:403 để cập nhật lại quyền nếu bị server chặn (thu hồi quyền)
+  useEffect(() => {
+    const handle403 = () => refreshPermissions();
+    window.addEventListener("auth:403", handle403);
+    return () => window.removeEventListener("auth:403", handle403);
+  }, [refreshPermissions]);
 
   const handleLogin = async (email: string, password: string) => {
     setError(null);
@@ -46,7 +61,13 @@ export default function App() {
       localStorage.setItem("email", response.email);
       localStorage.setItem("userId", response.userId);
       setUserEmail(response.email);
-      applyPermissions(await getEffectivePermissions(response.userId));
+      
+      // Chờ một chút để token được set vào local storage trước khi gọi api lấy quyền
+      setTimeout(async () => {
+        try {
+          applyPermissions(await getMyPermissions());
+        } catch {}
+      }, 0);
     } catch (err) {
       setError(toMessage(err));
     }

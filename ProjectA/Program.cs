@@ -30,8 +30,13 @@ if (string.IsNullOrWhiteSpace(connectionString))
 {
     throw new InvalidOperationException("ConnectionStrings:Postgres is required.");
 }
+
+var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
+dataSourceBuilder.EnableDynamicJson();
+var dataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(dataSource));
 
 builder.Services
     .AddIdentityCore<ApplicationUser>(options =>
@@ -50,6 +55,8 @@ builder.Services
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IImageStorageService, MinioImageStorageService>();
+
+builder.Services.AddHostedService<NotificationBackgroundService>();
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
@@ -161,6 +168,19 @@ builder.Services.AddAuthorization(options =>
     AddWritePolicy(Policies.PaymentAdd, Permissions.PaymentAdd);
     AddWritePolicy(Policies.PaymentEdit, Permissions.PaymentEdit);
     AddWritePolicy(Policies.PaymentDelete, Permissions.PaymentDelete);
+
+    AddWritePolicy(Policies.ComboManage, Permissions.ComboManage);
+    AddWritePolicy(Policies.InventoryManage, Permissions.InventoryManage);
+    AddWritePolicy(Policies.RentalManage, Permissions.RentalManage);
+
+    AddWritePolicy(Policies.EmployeeManage, Permissions.EmployeeManage);
+    AddWritePolicy(Policies.RosterManage, Permissions.RosterManage);
+    AddWritePolicy(Policies.AttendanceManage, Permissions.AttendanceManage);
+    AddViewPolicy(Policies.PayrollView, Permissions.PayrollView);
+
+    AddWritePolicy(Policies.PromotionManage, Permissions.PromotionManage);
+    AddWritePolicy(Policies.MembershipManage, Permissions.MembershipManage);
+    AddWritePolicy(Policies.NotificationManage, Permissions.NotificationManage);
 });
 
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
@@ -171,7 +191,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("Vite", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "https://localhost:5173")
+        policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "http://localhost:5174", "https://localhost:5174")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });

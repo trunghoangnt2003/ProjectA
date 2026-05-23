@@ -19,10 +19,10 @@ export function RosterSection() {
   const days = useMemo(() => weekDays(weekBase), [weekBase]);
 
   const loadAssignments = () =>
-    rosterService.list().then(setAssignments).catch((e) => notify.error(toMessage(e)));
+    rosterService.getAll({ pageSize: 1000 }).then(res => setAssignments(res.items)).catch((e) => notify.error(toMessage(e)));
 
   useEffect(() => {
-    employeeService.list().then((es) => setEmployees(es.filter((e) => e.status === "active")));
+    employeeService.getAll({ pageSize: 1000 }).then((res) => setEmployees(res.items.filter((e) => e.status === "active")));
     loadAssignments();
   }, []);
 
@@ -36,7 +36,7 @@ export function RosterSection() {
     const existing = map.get(`${emp.id}:${date}`);
     try {
       if (!shift) {
-        if (existing) await rosterService.remove(existing.id);
+        if (existing) await rosterService.delete(existing.id);
       } else if (existing) {
         const { id, ...rest } = existing;
         await rosterService.update(id, { ...rest, shift });

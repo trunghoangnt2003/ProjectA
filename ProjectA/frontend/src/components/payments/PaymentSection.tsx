@@ -66,17 +66,24 @@ interface CollectForm {
   status: Extract<PaymentStatus, "paid" | "pending">;
 }
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function PaymentSection() {
-  const { data, loading, create, update } = useCrudResource(paymentService, {
+  const { data: filtered, loading, create, update, page, totalPages, totalCount, setPage, setSearch, setDateRange } = usePagedResource(paymentService, {
+    startDate: todayIso,
+    endDate: todayIso,
+    sortBy: "date",
+    sortDesc: true,
+  }, {
     created: "Đã tạo khoản thu.",
     updated: "Đã cập nhật thanh toán.",
   });
   const [bookings, setBookings] = useState<Booking[]>([]);
 
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [methodFilter, setMethodFilter] = useState<MethodFilter>("all");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(todayIso);
 
   const [invoice, setInvoice] = useState<Payment | null>(null);
   const [refundTarget, setRefundTarget] = useState<Payment | null>(null);
@@ -85,42 +92,28 @@ export function PaymentSection() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    bookingService.list().then(setBookings).catch((e) => notify.error(toMessage(e)));
+    // bookingService.getAll() instead of bookingService.list() but for now keep it simple or just fetch unpaid bookings. Wait, bookingService.getAll returns PagedResult. We might need to handle this.
+    bookingService.getAll({ pageSize: 1000 }).then(res => setBookings(res.items)).catch((e) => notify.error(toMessage(e)));
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return data
-      .filter((p) => {
-        if (statusFilter !== "all" && p.status !== statusFilter) return false;
-        if (methodFilter !== "all" && p.method !== methodFilter) return false;
-        if (date && (p.paidAt ?? p.createdAt).slice(0, 10) !== date) return false;
-        if (
-          q &&
-          !p.code.toLowerCase().includes(q) &&
-          !p.refCode.toLowerCase().includes(q) &&
-          !(p.customerName ?? "").toLowerCase().includes(q)
-        )
-          return false;
-        return true;
-      })
-      .sort((a, b) => (b.paidAt ?? b.createdAt).localeCompare(a.paidAt ?? a.createdAt));
-  }, [data, search, statusFilter, methodFilter, date]);
+  useEffect(() => {
+    setDateRange(date || undefined, date || undefined);
+  }, [date]);
 
   // Thống kê (toàn bộ dữ liệu, không theo bộ lọc).
   const stats = useMemo(() => {
-    const paidToday = data
+    const paidToday = filtered
       .filter((p) => p.status === "paid" && (p.paidAt ?? p.createdAt).slice(0, 10) === todayIso)
       .reduce((s, p) => s + p.amount, 0);
-    const pending = data.filter((p) => p.status === "pending");
-    const refunded = data.filter((p) => p.status === "refunded");
+    const pending = filtered.filter((p) => p.status === "pending");
+    const refunded = filtered.filter((p) => p.status === "refunded");
     return {
       paidToday,
       pendingCount: pending.length,
       pendingAmount: pending.reduce((s, p) => s + p.amount, 0),
       refundedAmount: refunded.reduce((s, p) => s + p.amount, 0),
     };
-  }, [data]);
+  }, [filtered]);
 
   const setStatus = async (p: Payment, status: PaymentStatus, note?: string) => {
     const { id, ...rest } = p;
@@ -144,12 +137,14 @@ export function PaymentSection() {
   };
 
   const hasFilter =
-    search.trim() !== "" || statusFilter !== "all" || methodFilter !== "all" || date !== "";
+    searchQuery.trim() !== "" || statusFilter !== "all" || methodFilter !== "all" || date !== "";
   const clearFilters = () => {
+    setSearchQuery("");
     setSearch("");
     setStatusFilter("all");
     setMethodFilter("all");
     setDate("");
+    setDateRange(undefined, undefined);
   };
 
   // ---- Thu tiền cho lượt đặt ----
@@ -310,8 +305,12 @@ export function PaymentSection() {
             label="Tìm kiếm"
             placeholder="Mã PT, mã tham chiếu, khách…"
             leftSection={<IconSearch size={16} />}
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchQuery);
+            }}
+            onBlur={() => setSearch(searchQuery)}
             style={{ flex: 1, minWidth: 220 }}
           />
           <Select
@@ -341,17 +340,22 @@ export function PaymentSection() {
             </Button>
           )}
         </Group>
-        <Text size="xs" c="dimmed" mt="sm">
-          {filtered.length} / {data.length} khoản thu
-        </Text>
       </Card>
 
       <DataTable
-        data={filtered}
+        data={filtered.filter((p) => {
+          if (statusFilter !== "all" && p.status !== statusFilter) return false;
+          if (methodFilter !== "all" && p.method !== methodFilter) return false;
+          return true;
+        })}
         columns={columns}
         rowKey={(p) => p.id}
         loading={loading}
         emptyTitle={hasFilter ? "Không có khoản thu khớp bộ lọc" : "Chưa có khoản thu nào"}
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       {/* Hóa đơn */}

@@ -2,6 +2,8 @@ namespace ProjectA.Authorization
 {
     public static class Permissions
     {
+        public const string All = "*";
+
         public const string ProductView = "product.view";
         public const string ProductAdd = "product.add";
         public const string ProductEdit = "product.edit";
@@ -41,5 +43,23 @@ namespace ProjectA.Authorization
         public const string PaymentEdit = "payment.edit";
         public const string PaymentDelete = "payment.delete";
         public const string PaymentAll = "payment.*";
+
+        public const string ReportView = "report.view";
+        public const string SaleUse = "sale.use";
+        public const string ComboManage = "combo.manage";
+        public const string InventoryManage = "inventory.manage";
+        public const string RentalManage = "rental.manage";
+
+        public const string EmployeeManage = "employee.manage";
+        public const string RosterManage = "roster.manage";
+        public const string AttendanceManage = "attendance.manage";
+        public const string PayrollView = "payroll.view";
+
+        public const string PromotionManage = "promotion.manage";
+        public const string MembershipManage = "membership.manage";
+        public const string NotificationManage = "notification.manage";
+
+        public const string UserManage = "user.manage";
+        public const string RoleManage = "role.manage";
     }
 }

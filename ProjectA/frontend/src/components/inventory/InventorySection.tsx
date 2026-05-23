@@ -46,11 +46,14 @@ interface StockItem {
   low: boolean;
 }
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function InventorySection() {
+  const { data: movements, loading, create, page, totalPages, totalCount, setPage, setSearch, reload } = usePagedResource(stockMovementService, {}, {
+    created: "Đã lưu giao dịch kho."
+  });
   const [products, setProducts] = useState<Product[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
-  const [movements, setMovements] = useState<StockMovement[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const [opened, { open, close }] = useDisclosure(false);
   const [txType, setTxType] = useState<StockMovementType>("in");
@@ -59,21 +62,15 @@ export function InventorySection() {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<StockMovementType | "all">("all");
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([productService.list(), supplyService.list(), stockMovementService.list()])
-      .then(([p, s, m]) => {
-        setProducts(p);
-        setSupplies(s);
-        setMovements(m);
-      })
-      .catch((e) => notify.error(toMessage(e)))
-      .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+  useEffect(() => {
+    Promise.all([productService.list(), supplyService.list()]).then(([p, s]) => {
+      setProducts(p);
+      setSupplies(s);
+    }).catch(e => notify.error(toMessage(e)));
+  }, []);
 
   const items = useMemo<StockItem[]>(() => {
     const fromP: StockItem[] = products.map((p) => ({
@@ -90,16 +87,11 @@ export function InventorySection() {
   const lowCount = items.filter((i) => i.low).length;
 
   const movementsView = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return movements
-      .filter((m) => {
-        if (typeFilter !== "all" && m.type !== typeFilter) return false;
-        if (q && !m.itemName.toLowerCase().includes(q) && !(m.reason ?? "").toLowerCase().includes(q))
-          return false;
-        return true;
-      })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [movements, search, typeFilter]);
+    return movements.filter((m) => {
+      if (typeFilter !== "all" && m.type !== typeFilter) return false;
+      return true;
+    });
+  }, [movements, typeFilter]);
 
   const openTx = (type: StockMovementType) => {
     setTxType(type);
@@ -135,19 +127,15 @@ export function InventorySection() {
         const { id, ...rest } = s;
         await supplyService.update(id, { ...rest, quantity: balanceAfter });
       }
-      await stockMovementService.create({
-        createdAt: new Date().toISOString(),
+      await create({
         itemSource: item.source,
         itemId: item.id,
         itemName: item.name,
         type: txType,
         quantity: qty,
-        balanceAfter,
         reason: reason.trim() || undefined,
       });
-      notify.success(txType === "in" ? "Đã nhập kho." : "Đã xuất kho.");
       close();
-      load();
     } catch (err) {
       notify.error(toMessage(err));
     } finally {
@@ -218,7 +206,7 @@ export function InventorySection() {
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="lg">
         <StatCard label="Mặt hàng" value={items.length} icon={<IconBox size={26} />} color="brand" />
         <StatCard label="Sắp hết / cần nhập" value={lowCount} icon={<IconAlertTriangle size={26} />} color="orange" />
-        <StatCard label="Giao dịch đã ghi" value={movements.length} icon={<IconBox size={26} />} color="teal" />
+        <StatCard label="Giao dịch đã ghi" value={totalCount} icon={<IconBox size={26} />} color="teal" />
       </SimpleGrid>
 
       <Card mb="md" p="md">
@@ -227,8 +215,14 @@ export function InventorySection() {
             label="Tìm kiếm"
             placeholder="Tên mặt hàng hoặc lý do…"
             leftSection={<IconSearch size={16} />}
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.currentTarget.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchQuery);
+            }}
+            onBlur={() => setSearch(searchQuery)}
             style={{ flex: 1, minWidth: 220 }}
           />
           <Select
@@ -251,6 +245,10 @@ export function InventorySection() {
         rowKey={(m) => m.id}
         loading={loading}
         emptyTitle="Chưa có giao dịch kho"
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal opened={opened} onClose={close} title={txType === "in" ? "Nhập kho" : "Xuất kho"} centered>

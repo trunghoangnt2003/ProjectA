@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProjectA.Authorization;
 using ProjectA.Data;
+using ProjectA.Dtos.Common;
 using ProjectA.Dtos.Booking;
 using ProjectA.Models;
 
@@ -21,16 +22,50 @@ namespace ProjectA.Controllers
 
         [HttpGet]
         [Authorize(Policy = Policies.BookingView)]
-        public async Task<ActionResult<IEnumerable<BookingDto>>> GetAll([FromQuery] string? date)
+        public async Task<ActionResult<PagedResult<BookingDto>>> GetAll([FromQuery] ProjectA.Dtos.Common.QueryOptions opts)
         {
             var query = _dbContext.Bookings.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(date))
+
+            // Bookings typically use string "Date" "yyyy-MM-dd" or "yyyy-mm-dd"
+            if (opts.StartDate.HasValue)
             {
-                query = query.Where(b => b.Date == date);
+                var dStr = opts.StartDate.Value.ToString("yyyy-MM-dd");
+                query = query.Where(b => b.Date.CompareTo(dStr) >= 0);
+            }
+            if (opts.EndDate.HasValue)
+            {
+                var dStr = opts.EndDate.Value.ToString("yyyy-MM-dd");
+                query = query.Where(b => b.Date.CompareTo(dStr) <= 0);
             }
 
-            var items = await query.OrderByDescending(b => b.Date).ThenBy(b => b.StartTime).ToListAsync();
-            return Ok(items.Select(ToDto));
+            // Optional search by customer name
+            if (!string.IsNullOrWhiteSpace(opts.Search))
+            {
+                var term = opts.Search.ToLower();
+                query = query.Where(b => b.CustomerName.ToLower().Contains(term));
+            }
+
+            if (opts.SortBy == "date" || string.IsNullOrWhiteSpace(opts.SortBy))
+            {
+                query = opts.SortDesc 
+                    ? query.OrderByDescending(b => b.Date).ThenByDescending(b => b.StartTime)
+                    : query.OrderBy(b => b.Date).ThenBy(b => b.StartTime);
+            }
+
+            var total = await query.CountAsync();
+            var items = await query
+                .Skip((opts.Page - 1) * opts.PageSize)
+                .Take(opts.PageSize)
+                .Select(b => ToDto(b))
+                .ToListAsync();
+
+            return Ok(new PagedResult<BookingDto>
+            {
+                Items = items,
+                TotalCount = total,
+                Page = opts.Page,
+                PageSize = opts.PageSize
+            });
         }
 
         [HttpGet("{id:guid}")]

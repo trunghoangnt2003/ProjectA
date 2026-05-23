@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
-import { Card, Center, Loader, Table } from "@mantine/core";
+import { Card, Center, Loader, Table, Pagination, Group, Text } from "@mantine/core";
 import { EmptyState } from "./EmptyState";
 
 export interface DataTableColumn<T> {
-  /** Định danh cột, duy nhất trong bảng. */
   key: string;
   header: ReactNode;
   render: (row: T) => ReactNode;
@@ -18,12 +17,12 @@ interface DataTableProps<T> {
   loading?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
+  page?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
+  totalCount?: number;
 }
 
-/**
- * Bảng dữ liệu chuẩn: header + rows + trạng thái loading/empty.
- * Dùng cho mọi danh sách (sân, đặt sân, nhân viên, vật tư...).
- */
 export function DataTable<T>({
   data,
   columns,
@@ -31,6 +30,10 @@ export function DataTable<T>({
   loading,
   emptyTitle,
   emptyDescription,
+  page,
+  totalPages,
+  onPageChange,
+  totalCount,
 }: DataTableProps<T>) {
   return (
     <Card p={0}>
@@ -69,6 +72,20 @@ export function DataTable<T>({
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
+      )}
+
+      {totalPages !== undefined && totalPages > 1 && onPageChange && (
+        <Group justify="space-between" px="md" py="sm" style={{ borderTop: "1px solid var(--mantine-color-gray-2)" }}>
+          <Text size="sm" c="dimmed">
+            {totalCount !== undefined ? `Tổng số: ${totalCount}` : ""}
+          </Text>
+          <Pagination
+            value={page ?? 1}
+            onChange={onPageChange}
+            total={totalPages}
+            size="sm"
+          />
+        </Group>
       )}
     </Card>
   );

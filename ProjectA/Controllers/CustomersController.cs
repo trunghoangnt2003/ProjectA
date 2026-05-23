@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProjectA.Authorization;
 using ProjectA.Data;
+using ProjectA.Dtos.Common;
 using ProjectA.Dtos.Customer;
 using ProjectA.Models;
 
@@ -21,10 +22,37 @@ namespace ProjectA.Controllers
 
         [HttpGet]
         [Authorize(Policy = Policies.CustomerView)]
-        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetAll()
+        public async Task<ActionResult<PagedResult<CustomerDto>>> GetAll([FromQuery] QueryOptions opts)
         {
-            var items = await _dbContext.Customers.AsNoTracking().OrderBy(c => c.Name).ToListAsync();
-            return Ok(items.Select(ToDto));
+            var query = _dbContext.Customers.AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(opts.Search))
+            {
+                var s = opts.Search.ToLower();
+                query = query.Where(x => x.Name.ToLower().Contains(s) || x.Phone.Contains(s) || (x.Email != null && x.Email.ToLower().Contains(s)));
+            }
+
+            query = opts.SortBy?.ToLower() switch
+            {
+                "loyaltypoints" => opts.SortDesc ? query.OrderByDescending(x => x.LoyaltyPoints) : query.OrderBy(x => x.LoyaltyPoints),
+                "totalbookings" => opts.SortDesc ? query.OrderByDescending(x => x.TotalBookings) : query.OrderBy(x => x.TotalBookings),
+                "debt" => opts.SortDesc ? query.OrderByDescending(x => x.Debt) : query.OrderBy(x => x.Debt),
+                "joinedat" => opts.SortDesc ? query.OrderByDescending(x => x.JoinedAt) : query.OrderBy(x => x.JoinedAt),
+                _ => opts.SortDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name)
+            };
+
+            var totalCount = await query.CountAsync();
+            var items = await query.Skip((opts.Page - 1) * opts.PageSize).Take(opts.PageSize)
+                .Select(x => ToDto(x))
+                .ToListAsync();
+
+            return Ok(new PagedResult<CustomerDto>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = opts.Page,
+                PageSize = opts.PageSize
+            });
         }
 
         [HttpGet("{id:guid}")]

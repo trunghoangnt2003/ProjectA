@@ -1,65 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, Group, Progress, SimpleGrid, Text, TextInput } from "@mantine/core";
 import { IconCash, IconCalendarStats } from "@tabler/icons-react";
 import { PageHeader, DataTable, StatCard } from "../common";
 import type { DataTableColumn } from "../common";
-import { attendanceService } from "../../services/attendanceService";
-import { employeeService } from "../../services/employeeService";
-import type { Attendance, Employee } from "../../types/domain";
+import { payrollService } from "../../services/payrollService";
+import type { PayrollRow } from "../../services/payrollService";
 import { formatVnd } from "../../lib/format";
 import { toMessage, notify } from "../../lib/notify";
 
 const curMonth = new Date().toISOString().slice(0, 7); // yyyy-mm
 
-interface PayrollRow {
-  id: string;
-  name: string;
-  position: string;
-  worked: number; // ca công (có mặt + muộn)
-  absent: number;
-  onTime: number; // %
-  shiftRate: number;
-  salary: number;
-}
-
 export function PayrollSection() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [rows, setRows] = useState<PayrollRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(curMonth);
 
   useEffect(() => {
-    Promise.all([employeeService.list(), attendanceService.list()])
-      .then(([e, a]) => {
-        setEmployees(e);
-        setAttendance(a);
-      })
+    setLoading(true);
+    payrollService.getPayroll(month)
+      .then(setRows)
       .catch((e) => notify.error(toMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
-
-  const rows = useMemo<PayrollRow[]>(() => {
-    return employees
-      .filter((e) => e.status === "active")
-      .map((e) => {
-        const recs = attendance.filter((a) => a.employeeId === e.id && a.date.startsWith(month));
-        const present = recs.filter((r) => r.status === "present").length;
-        const late = recs.filter((r) => r.status === "late").length;
-        const absent = recs.filter((r) => r.status === "absent").length;
-        const worked = present + late;
-        const total = present + late + absent;
-        return {
-          id: e.id,
-          name: e.name,
-          position: e.position,
-          worked,
-          absent,
-          onTime: total > 0 ? Math.round((present / total) * 100) : 0,
-          shiftRate: e.shiftRate,
-          salary: worked * e.shiftRate,
-        };
-      });
-  }, [employees, attendance, month]);
+  }, [month]);
 
   const totalPayroll = rows.reduce((s, r) => s + r.salary, 0);
   const totalShifts = rows.reduce((s, r) => s + r.worked, 0);

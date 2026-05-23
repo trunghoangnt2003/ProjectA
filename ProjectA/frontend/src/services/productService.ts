@@ -1,19 +1,40 @@
 import type { Product } from "../types/domain";
-import { createMockService } from "./mock/mockClient";
+import type { PagedResult, QueryOptions } from "../types";
+import { api } from "./api";
 
-// Hàng hóa bán cho khách: đồ uống + đồ ăn. (Trước đây là module "Thức uống".)
-const seed: Product[] = [
-  { id: "p1", name: "Nước suối Aquafina 500ml", category: "Nước suối", price: 10000, stock: 120 },
-  { id: "p2", name: "Pocari Sweat", category: "Tăng lực", price: 18000, stock: 45 },
-  { id: "p3", name: "Coca-Cola lon", category: "Nước ngọt", price: 15000, stock: 8 },
-  { id: "p4", name: "Revive chanh muối", category: "Tăng lực", price: 12000, stock: 60 },
-  { id: "p5", name: "Bia Tiger lon", category: "Bia", price: 22000, stock: 0 },
-  { id: "p6", name: "Trà C2 đào", category: "Nước ngọt", price: 12000, stock: 30 },
-  { id: "p7", name: "Mì ly Hảo Hảo", category: "Đồ ăn", price: 15000, stock: 40 },
-  { id: "p8", name: "Bánh mì trứng", category: "Đồ ăn", price: 20000, stock: 12 },
-];
+export const productService = {
+  getAll: async (opts: QueryOptions = {}): Promise<PagedResult<Product>> => {
+    const params = new URLSearchParams();
+    if (opts.page) params.append("page", opts.page.toString());
+    if (opts.pageSize) params.append("pageSize", opts.pageSize.toString());
+    if (opts.sortBy) params.append("sortBy", opts.sortBy);
+    if (opts.sortDesc !== undefined) params.append("sortDesc", opts.sortDesc.toString());
+    if (opts.search) params.append("search", opts.search);
 
-export const productService = createMockService(seed);
+    const qs = params.toString();
+    return api<PagedResult<Product>>(`/api/products${qs ? `?${qs}` : ""}`);
+  },
+
+  list: async () => {
+    const res = await productService.getAll({ pageSize: 1000 });
+    return res.items;
+  },
+
+  create: (input: Omit<Product, "id">) =>
+    api<Product>("/api/products", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  update: (id: string, input: Omit<Product, "id">) =>
+    api<Product>(`/api/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+
+  remove: (id: string) =>
+    api<void>(`/api/products/${id}`, { method: "DELETE" }),
+};
 
 /** Ngưỡng tồn kho thấp để cảnh báo. */
 export const PRODUCT_LOW_STOCK = 10;

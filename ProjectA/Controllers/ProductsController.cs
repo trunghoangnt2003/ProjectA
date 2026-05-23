@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProjectA.Authorization;
 using ProjectA.Data;
+using ProjectA.Dtos.Common;
 using ProjectA.Dtos.Product;
 using ProjectA.Models;
 
@@ -21,15 +22,35 @@ namespace ProjectA.Controllers
 
         [HttpGet]
         [Authorize(Policy = Policies.ProductView)]
-        public async Task<ActionResult<IEnumerable<ProductDto>>> GetAll()
+        public async Task<ActionResult<PagedResult<ProductDto>>> GetAll([FromQuery] QueryOptions opts)
         {
-            var products = await _dbContext.Products
-                .AsNoTracking()
-                .OrderBy(p => p.Name)
+            var query = _dbContext.Products.AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(opts.Search))
+            {
+                var s = opts.Search.ToLower();
+                query = query.Where(p => p.Name.ToLower().Contains(s) || (p.Category != null && p.Category.ToLower().Contains(s)));
+            }
+
+            query = opts.SortBy?.ToLower() switch
+            {
+                "price" => opts.SortDesc ? query.OrderByDescending(p => p.Price) : query.OrderBy(p => p.Price),
+                "stock" => opts.SortDesc ? query.OrderByDescending(p => p.Stock) : query.OrderBy(p => p.Stock),
+                _ => opts.SortDesc ? query.OrderByDescending(p => p.Name) : query.OrderBy(p => p.Name)
+            };
+
+            var totalCount = await query.CountAsync();
+            var items = await query.Skip((opts.Page - 1) * opts.PageSize).Take(opts.PageSize)
                 .Select(p => ToDto(p))
                 .ToListAsync();
 
-            return Ok(products);
+            return Ok(new PagedResult<ProductDto>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = opts.Page,
+                PageSize = opts.PageSize
+            });
         }
 
         [HttpGet("{id:guid}")]

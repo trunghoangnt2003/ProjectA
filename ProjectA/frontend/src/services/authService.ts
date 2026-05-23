@@ -1,34 +1,20 @@
 import type { AuthResponse } from "../types";
-import { mockDelay } from "./mock/mockClient";
+import { api } from "./api";
 
 /**
- * MOCK login (FE làm trước, chưa cần BE).
- * Khi có API thật, thay thân hàm bằng:
- *   return api<AuthResponse>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
- * (import { api } from "./api")
+ * Đăng nhập bằng email + mật khẩu → gọi API thật.
+ * Tài khoản admin seed: admin@projecta.local / Admin@12345
  */
-
-// Tài khoản demo — mật khẩu chung: 123456
-const MOCK_ACCOUNTS = [
-  { id: "u1", email: "admin@projecta.local", password: "123456" },
-  { id: "u2", email: "letan1@projecta.local", password: "123456" },
-  { id: "u3", email: "phucvu1@projecta.local", password: "123456" },
-];
-
 export async function login(email: string, password: string): Promise<AuthResponse> {
-  const account = MOCK_ACCOUNTS.find(
-    (a) => a.email.toLowerCase() === email.trim().toLowerCase() && a.password === password
-  );
-
-  if (!account) {
-    await mockDelay(null);
-    throw new Error("Email hoặc mật khẩu không đúng.");
-  }
-
-  return mockDelay({
-    token: `mock-token-${account.id}`,
-    expiresAtUtc: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    userId: account.id,
-    email: account.email,
+  return api<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
   });
+}
+
+/**
+ * Lấy danh sách quyền của user hiện tại.
+ */
+export async function getMyPermissions(): Promise<string[]> {
+  return api<string[]>("/api/auth/me/permissions");
 }

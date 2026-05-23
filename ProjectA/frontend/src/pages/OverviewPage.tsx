@@ -12,10 +12,7 @@ import { PageHeader, StatCard, DataTable } from "../components/common";
 import type { DataTableColumn } from "../components/common";
 import { STATUS_META } from "../components/bookings/bookingStatus";
 import { bookingService } from "../services/bookingService";
-import { courtService } from "../services/courtService";
-import { customerService } from "../services/customerService";
-import { orderService } from "../services/orderService";
-import { overviewMetrics, type OverviewMetrics } from "../services/analyticsService";
+import { analyticsService, type OverviewMetrics } from "../services/analyticsService";
 import type { Booking } from "../types/domain";
 import { formatVnd, formatDate } from "../lib/format";
 
@@ -37,25 +34,25 @@ export function OverviewPage() {
   const [customers, setCustomers] = useState(0);
   const [metrics, setMetrics] = useState<OverviewMetrics>(EMPTY_METRICS);
   const [loading, setLoading] = useState(true);
+  const [todayBookings, setTodayBookings] = useState<Booking[]>([]);
 
   useEffect(() => {
-    Promise.all([
-      bookingService.list(),
-      courtService.list(),
-      customerService.list(),
-      orderService.list(),
-    ])
-      .then(([bk, courts, custs, orders]) => {
-        setBookings(bk);
-        setCustomers(custs.length);
-        setMetrics(overviewMetrics(bk, courts, orders));
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    const fetchOverview = async () => {
+      try {
+        const data = await analyticsService.getOverview();
+        setMetrics(data);
 
-  const todayBookings = bookings
-    .filter((b) => b.date === todayIso)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+        // Fetch bookings for today separately
+        const res = await bookingService.getAll({ date: todayIso, pageSize: 100 });
+        setTodayBookings(res.items.sort((a, b) => a.startTime.localeCompare(b.startTime)));
+      } catch (e) {
+        // Handle error if needed
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOverview();
+  }, []);
 
   const columns: DataTableColumn<Booking>[] = [
     { key: "code", header: "Mã", render: (b) => b.code },

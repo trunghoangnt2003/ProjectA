@@ -1,30 +1,48 @@
 import type { Combo } from "../types/domain";
-import { createMockService } from "./mock/mockClient";
+import type { PagedResult, QueryOptions } from "../types";
+import { api } from "./api";
 
-// Combo tham chiếu mặt hàng theo id của productService / supplyService.
-const seed: Combo[] = [
-  {
-    id: "cb1",
-    name: "Combo Giải nhiệt",
-    description: "2 nước suối + 1 nước ngọt cho cặp đôi sau trận.",
-    lines: [
-      { refId: "p1", source: "product", name: "Nước suối Aquafina 500ml", quantity: 2 },
-      { refId: "p3", source: "product", name: "Coca-Cola lon", quantity: 1 },
-    ],
-    price: 30000, // ưu đãi so với 35.000 lẻ
-    active: true,
-  },
-  {
-    id: "cb2",
-    name: "Combo Tập luyện",
-    description: "1 ống cầu + 1 nước tăng lực.",
-    lines: [
-      { refId: "s1", source: "supply", name: "Cầu lông Yonex AS-30", quantity: 1 },
-      { refId: "p2", source: "product", name: "Pocari Sweat", quantity: 1 },
-    ],
-    price: 330000,
-    active: true,
-  },
-];
+export const comboService = {
+  getAll: async (opts: QueryOptions = {}): Promise<PagedResult<Combo>> => {
+    const params = new URLSearchParams();
+    if (opts.page) params.append("page", opts.page.toString());
+    if (opts.pageSize) params.append("pageSize", opts.pageSize.toString());
+    if (opts.startDate) params.append("startDate", opts.startDate);
+    if (opts.endDate) params.append("endDate", opts.endDate);
+    if (opts.sortBy) params.append("sortBy", opts.sortBy);
+    if (opts.sortDesc !== undefined) params.append("sortDesc", opts.sortDesc.toString());
+    if (opts.search) params.append("search", opts.search);
 
-export const comboService = createMockService(seed);
+    const qs = params.toString();
+    return api<PagedResult<Combo>>(`/api/combos${qs ? `?${qs}` : ""}`);
+  },
+
+  list: async () => {
+    const res = await comboService.getAll({ pageSize: 1000 });
+    return res.items;
+  },
+
+  getById: async (id: string): Promise<Combo> => {
+    return api<Combo>(`/api/combos/${id}`);
+  },
+
+  create: async (item: Omit<Combo, "id">): Promise<Combo> => {
+    return api<Combo>("/api/combos", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+  },
+
+  update: async (id: string, item: Partial<Combo>): Promise<Combo> => {
+    return api<Combo>(`/api/combos/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(item),
+    });
+  },
+
+  delete: async (id: string): Promise<void> => {
+    return api<void>(`/api/combos/${id}`, {
+      method: "DELETE",
+    });
+  },
+};

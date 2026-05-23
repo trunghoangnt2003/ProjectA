@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Button, Card, Container, Group, Stack, Text, Title } from "@mantine/core";
 import { IconCalendarOff, IconLogin2 } from "@tabler/icons-react";
 import { useCustomerAuth } from "../hooks/useCustomerAuth";
-import { bookingService } from "../services/bookingService";
+import { bookingService, setCourtMaps } from "../services/bookingService";
 import { courtService } from "../services/courtService";
 import type { Booking, ConfirmStatus, Court } from "../types/domain";
 import { slotStart, slotEnd } from "../lib/time";
@@ -32,7 +32,10 @@ export function MyBookingsPage({ onGoAccount }: { onGoAccount?: () => void }) {
   }, [customer]);
 
   useEffect(() => {
-    courtService.list().then(setCourts);
+    courtService.list().then((c) => {
+      setCourts(c);
+      setCourtMaps(c);
+    });
   }, []);
   useEffect(reload, [reload]);
 

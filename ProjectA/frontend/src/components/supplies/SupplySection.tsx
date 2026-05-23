@@ -46,15 +46,19 @@ const emptyForm: SupplyForm = {
   rentalValue: undefined,
 };
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function SupplySection() {
-  const { data, loading, create, update, remove } = useCrudResource(
+  const { data, loading, create, update, remove, page, totalPages, totalCount, setPage, setSearch } = usePagedResource(
     supplyService,
+    { sortBy: "name", sortDesc: false },
     { created: "Đã thêm vật tư.", updated: "Đã cập nhật.", removed: "Đã xóa vật tư." }
   );
   const [opened, { open, close }] = useDisclosure(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [typeFilter, setTypeFilter] = useState<SaleFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const form = useForm<SupplyForm>({
     initialValues: emptyForm,
@@ -201,7 +205,17 @@ export function SupplySection() {
         title="Vật tư"
         subtitle="Vật tư bán cho khách và vật tư phục vụ sân"
         actions={
-          <>
+          <Group>
+            <TextInput
+              placeholder="Tìm kiếm..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setSearch(searchQuery);
+              }}
+              onBlur={() => setSearch(searchQuery)}
+              style={{ width: 200 }}
+            />
             <SegmentedControl
               value={typeFilter}
               onChange={(v) => setTypeFilter(v as SaleFilter)}
@@ -214,7 +228,7 @@ export function SupplySection() {
             <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
               Thêm vật tư
             </Button>
-          </>
+          </Group>
         }
       />
 
@@ -224,6 +238,10 @@ export function SupplySection() {
         rowKey={(s) => s.id}
         loading={loading}
         emptyTitle="Chưa có vật tư nào"
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal

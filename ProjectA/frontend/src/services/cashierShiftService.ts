@@ -1,16 +1,23 @@
+import { api } from "./api";
 import type { CashierShift } from "../types/domain";
-import { createMockService } from "./mock/mockClient";
+import type { PagedResult, QueryOptions } from "./api";
 
-const today = new Date();
-const atDay = (ago: number, h: number) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() - ago);
-  d.setHours(h, 0, 0, 0);
-  return d.toISOString();
+export const cashierShiftService = {
+  getAll: async (options?: QueryOptions): Promise<PagedResult<CashierShift>> => {
+    const res = await api.get("/cashiershifts", { params: options });
+    return res.data;
+  },
+
+  create: async (data: Omit<CashierShift, "id">): Promise<CashierShift> => {
+    const res = await api.post("/cashiershifts", data);
+    return res.data;
+  },
+
+  update: async (id: string, data: Partial<CashierShift>): Promise<void> => {
+    await api.put(`/cashiershifts/${id}`, data);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/cashiershifts/${id}`);
+  },
 };
-
-const seed: CashierShift[] = [
-  { id: "cs1", cashier: "Ngô Thị Hà", openedAt: atDay(1, 8), closedAt: atDay(1, 17), openingCash: 1000000, countedCash: 3850000, status: "closed", note: "Khớp quỹ." },
-];
-
-export const cashierShiftService = createMockService(seed);

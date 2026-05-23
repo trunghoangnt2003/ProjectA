@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Card, Container, Group, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { IconBell, IconClockHour4, IconTag, IconGift } from "@tabler/icons-react";
 import { useCustomerAuth } from "../hooks/useCustomerAuth";
-import { bookingService } from "../services/bookingService";
+import { bookingService, setCourtMaps } from "../services/bookingService";
 import { courtService } from "../services/courtService";
 import type { Booking, Court } from "../types/domain";
 import { slotStart } from "../lib/time";
@@ -22,7 +22,10 @@ export function NotificationsPage() {
   const [courts, setCourts] = useState<Court[]>([]);
 
   useEffect(() => {
-    courtService.list().then(setCourts);
+    courtService.list().then((c) => {
+      setCourts(c);
+      setCourtMaps(c);
+    });
     if (customer) bookingService.listByPhone(customer.phone).then(setBookings);
   }, [customer]);
 

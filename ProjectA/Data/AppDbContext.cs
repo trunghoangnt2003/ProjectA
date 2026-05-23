@@ -12,19 +12,27 @@ namespace ProjectA.Data
         {
         }
 
-        public DbSet<Product> Products => Set<Product>();
+        public DbSet<Customer> Customers { get; set; } = null!;
+        public DbSet<Booking> Bookings { get; set; } = null!;
+        public DbSet<Product> Products { get; set; } = null!;
+        public DbSet<Supply> Supplies { get; set; } = null!;
+        public DbSet<Order> Orders { get; set; } = null!;
+        public DbSet<Payment> Payments { get; set; } = null!;
+        public DbSet<Combo> Combos { get; set; } = null!;
+        public DbSet<ComboLine> ComboLines { get; set; } = null!;
+        public DbSet<Rental> Rentals { get; set; } = null!;
+        public DbSet<StockMovement> StockMovements { get; set; } = null!;
+        public DbSet<Employee> Employees { get; set; } = null!;
+        public DbSet<ShiftAssignment> ShiftAssignments { get; set; } = null!;
+        public DbSet<Attendance> Attendances { get; set; } = null!;
+        public DbSet<CashierShift> CashierShifts { get; set; } = null!;
+
+        public DbSet<Promotion> Promotions { get; set; } = null!;
+        public DbSet<MembershipPlan> MembershipPlans { get; set; } = null!;
+        public DbSet<AppNotification> AppNotifications { get; set; } = null!;
+        public DbSet<AutomationRule> AutomationRules { get; set; } = null!;
 
         public DbSet<Court> Courts => Set<Court>();
-
-        public DbSet<Customer> Customers => Set<Customer>();
-
-        public DbSet<Booking> Bookings => Set<Booking>();
-
-        public DbSet<Supply> Supplies => Set<Supply>();
-
-        public DbSet<Order> Orders => Set<Order>();
-
-        public DbSet<Payment> Payments => Set<Payment>();
 
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
@@ -40,6 +48,29 @@ namespace ProjectA.Data
 
                 entity.Property(p => p.Price)
                     .HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<Combo>(entity =>
+            {
+                entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Price).HasColumnType("numeric(18,2)");
+                entity.HasMany(e => e.Lines)
+                      .WithOne(e => e.Combo)
+                      .HasForeignKey(e => e.ComboId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<Rental>(entity =>
+            {
+                entity.Property(e => e.Code).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.Fee).HasColumnType("numeric(18,2)");
+                entity.Property(e => e.Deposit).HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<StockMovement>(entity =>
+            {
+                entity.Property(e => e.Type).HasMaxLength(50);
+                entity.Property(e => e.ItemSource).HasMaxLength(50);
             });
 
             builder.Entity<Court>(entity =>
@@ -119,6 +150,75 @@ namespace ProjectA.Data
                 entity.Property(p => p.Status).HasMaxLength(20);
                 entity.Property(p => p.Note).HasMaxLength(500);
                 entity.Property(p => p.Amount).HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<Employee>(entity =>
+            {
+                entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+                entity.Property(e => e.Position).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.Phone).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.Shift).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.ShiftRate).HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<ShiftAssignment>(entity =>
+            {
+                entity.Property(e => e.EmployeeName).HasMaxLength(120).IsRequired();
+                entity.Property(e => e.Shift).HasMaxLength(20).IsRequired();
+                entity.HasIndex(e => e.Date);
+                entity.HasOne(e => e.Employee).WithMany().HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<Attendance>(entity =>
+            {
+                entity.Property(e => e.EmployeeName).HasMaxLength(120).IsRequired();
+                entity.Property(e => e.Shift).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+                entity.HasIndex(e => e.Date);
+                entity.HasOne(e => e.Employee).WithMany().HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<CashierShift>(entity =>
+            {
+                entity.Property(e => e.Cashier).HasMaxLength(120).IsRequired();
+                entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.Note).HasMaxLength(500);
+                entity.Property(e => e.OpeningCash).HasColumnType("numeric(18,2)");
+                entity.Property(e => e.CountedCash).HasColumnType("numeric(18,2)");
+            });
+
+            builder.Entity<Promotion>(entity =>
+            {
+                entity.Property(e => e.Code).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Type).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.Value).HasColumnType("numeric(18,2)");
+                entity.Property(e => e.MinOrder).HasColumnType("numeric(18,2)");
+                entity.HasIndex(e => e.Code).IsUnique();
+            });
+
+            builder.Entity<MembershipPlan>(entity =>
+            {
+                entity.Property(e => e.Level).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Price).HasColumnType("numeric(18,2)");
+                entity.Property(e => e.DiscountPercent).HasColumnType("numeric(5,2)");
+                entity.Property(e => e.Benefits).HasColumnType("jsonb");
+            });
+
+            builder.Entity<AppNotification>(entity =>
+            {
+                entity.Property(e => e.Channel).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Audience).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            });
+
+            builder.Entity<AutomationRule>(entity =>
+            {
+                entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Channel).HasMaxLength(50).IsRequired();
             });
 
             builder.Entity<RefreshToken>(entity =>

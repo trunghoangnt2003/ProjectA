@@ -1,31 +1,42 @@
 import type { Rental } from "../types/domain";
-import { createMockService } from "./mock/mockClient";
+import type { PagedResult, QueryOptions } from "../types";
+import { api } from "./api";
 
-const today = new Date();
-const atDay = (ago: number, h: number) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() - ago);
-  d.setHours(h, 0, 0, 0);
-  return d.toISOString();
-};
-const isoDate = (ago: number) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() - ago);
-  return d.toISOString().slice(0, 10);
-};
+export const rentalService = {
+  getAll: async (opts: QueryOptions = {}): Promise<PagedResult<Rental>> => {
+    const params = new URLSearchParams();
+    if (opts.page) params.append("page", opts.page.toString());
+    if (opts.pageSize) params.append("pageSize", opts.pageSize.toString());
+    if (opts.startDate) params.append("startDate", opts.startDate);
+    if (opts.endDate) params.append("endDate", opts.endDate);
+    if (opts.sortBy) params.append("sortBy", opts.sortBy);
+    if (opts.sortDesc !== undefined) params.append("sortDesc", opts.sortDesc.toString());
+    if (opts.search) params.append("search", opts.search);
 
-// Thuê vợt/giày — itemId khớp vật tư cho thuê trong supplyService (s4 vợt, s7 giày).
-const seed: Rental[] = [
-  {
-    id: "r1", code: "TH-5001", itemId: "s4", itemName: "Vợt cho thuê Yonex",
-    customerName: "Trần Thị Bình", customerPhone: "0912345678", quantity: 2, fee: 60000, deposit: 400000,
-    borrowedAt: atDay(0, 17), dueAt: isoDate(0), status: "borrowed",
+    const qs = params.toString();
+    return api<PagedResult<Rental>>(`/api/rentals${qs ? `?${qs}` : ""}`);
   },
-  {
-    id: "r2", code: "TH-5002", itemId: "s7", itemName: "Giày cầu lông cho thuê",
-    customerName: "Lê Hoàng Cường", customerPhone: "0923456789", quantity: 1, fee: 25000, deposit: 150000,
-    borrowedAt: atDay(1, 19), returnedAt: atDay(1, 21), status: "returned",
-  },
-];
 
-export const rentalService = createMockService(seed);
+  getById: async (id: string): Promise<Rental> => {
+    return api<Rental>(`/api/rentals/${id}`);
+  },
+
+  create: async (item: Omit<Rental, "id" | "code" | "status" | "returnedAt">): Promise<Rental> => {
+    return api<Rental>("/api/rentals", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+  },
+
+  returnRental: async (id: string): Promise<Rental> => {
+    return api<Rental>(`/api/rentals/${id}/return`, {
+      method: "PUT",
+    });
+  },
+
+  delete: async (id: string): Promise<void> => {
+    return api<void>(`/api/rentals/${id}`, {
+      method: "DELETE",
+    });
+  },
+};

@@ -47,25 +47,21 @@ interface RentForm {
   note: string;
 }
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function RentalSection() {
-  const [rentals, setRentals] = useState<Rental[]>([]);
+  const { data: rentals, loading, create, update, page, totalPages, totalCount, setPage, reload } = usePagedResource(rentalService, {}, {
+    created: "Đã cho thuê.",
+    updated: "Đã nhận trả.",
+  });
   const [supplies, setSupplies] = useState<Supply[]>([]);
-  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<RentalStatus | "all">("all");
   const [opened, { open, close }] = useDisclosure(false);
   const [saving, setSaving] = useState(false);
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([rentalService.list(), supplyService.list()])
-      .then(([r, s]) => {
-        setRentals(r);
-        setSupplies(s);
-      })
-      .catch((e) => notify.error(toMessage(e)))
-      .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+  useEffect(() => {
+    supplyService.list().then(setSupplies).catch((e) => notify.error(toMessage(e)));
+  }, []);
 
   const rentables = useMemo(() => supplies.filter(isRentable), [supplies]);
 
@@ -155,7 +151,7 @@ export function RentalSection() {
       }
       notify.success(`Đã cho thuê · thu ${formatVnd(fee)}, giữ cọc ${formatVnd(values.deposit)}.`);
       close();
-      load();
+      reload();
     } catch (err) {
       notify.error(toMessage(err));
     } finally {
@@ -172,9 +168,9 @@ export function RentalSection() {
         await supplyService.update(id, { ...rest, quantity: item.quantity + r.quantity });
       }
       const { id, ...rest } = r;
-      await rentalService.update(id, { ...rest, status: "returned", returnedAt: new Date().toISOString() });
+      await rentalService.returnRental(id);
       notify.success(`Đã nhận trả, hoàn cọc ${formatVnd(r.deposit)}.`);
-      load();
+      reload();
     } catch (err) {
       notify.error(toMessage(err));
     }
@@ -275,6 +271,10 @@ export function RentalSection() {
         rowKey={(r) => r.id}
         loading={loading}
         emptyTitle="Chưa có lượt thuê nào"
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal opened={opened} onClose={close} title="Cho thuê vật tư" centered>

@@ -11,17 +11,7 @@ import {
 } from "@mantine/core";
 import { BarChart, LineChart } from "@mantine/charts";
 import { PageHeader } from "../common";
-import { bookingService } from "../../services/bookingService";
-import { orderService } from "../../services/orderService";
-import { courtService } from "../../services/courtService";
-import {
-  bookingTrends,
-  courtPerformance,
-  lastNDays,
-  peakHours,
-  revenueByDay,
-  topCustomers,
-} from "../../services/analyticsService";
+import { analyticsService } from "../../services/analyticsService";
 import type { Booking, Order } from "../../types/domain";
 import { formatVnd } from "../../lib/format";
 import { toMessage, notify } from "../../lib/notify";
@@ -55,37 +45,32 @@ function ChartCard({
 }
 
 export function ReportsSection() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [courtCount, setCourtCount] = useState(0);
+  const [data, setData] = useState<any>({
+    revenue: [],
+    trends: [],
+    peak: [],
+    tops: [],
+    courts: []
+  });
   const [loading, setLoading] = useState(true);
   const [rangeDays, setRangeDays] = useState("14");
 
   useEffect(() => {
-    Promise.all([bookingService.list(), orderService.list(), courtService.list()])
-      .then(([bk, ord, courts]) => {
-        setBookings(bk);
-        setOrders(ord);
-        setCourtCount(courts.length);
+    setLoading(true);
+    analyticsService.getReports(Number(rangeDays))
+      .then((res) => {
+        setData({
+          ...res,
+          revenue: res.revenue.map((r: any) => ({ date: r.date, "Tiền sân": r.tiền_sân, "Bán hàng": r.bán_hàng })),
+          trends: res.trends.map((t: any) => ({ date: t.date, "Lượt đặt": t.lượt_đặt, "Hủy": t.hủy })),
+          peak: res.peak.map((p: any) => ({ hour: p.hour, "Lượt đặt": p.lượt_đặt })),
+          tops: res.tops.map((t: any) => ({ name: t.name, "Chi tiêu": t.chi_tiêu })),
+          courts: res.courts.map((c: any) => ({ court: c.court, "Doanh thu": c.doanh_thu }))
+        });
       })
       .catch((e) => notify.error(toMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
-
-  const data = useMemo(() => {
-    const days = lastNDays(Number(rangeDays));
-    const fromIso = days[0];
-    return {
-      revenue: revenueByDay(bookings, orders, days),
-      trends: bookingTrends(bookings, days),
-      peak: peakHours(bookings, fromIso),
-      tops: topCustomers(bookings, orders, fromIso).map((t) => ({
-        name: t.name,
-        "Chi tiêu": t.amount,
-      })),
-      courts: courtPerformance(bookings, fromIso),
-    };
-  }, [bookings, orders, rangeDays]);
+  }, [rangeDays]);
 
   if (loading) {
     return (
@@ -178,7 +163,7 @@ export function ReportsSection() {
         </SimpleGrid>
 
         <Text size="xs" c="dimmed">
-          Số liệu mock tổng hợp từ {courtCount} sân, lượt đặt và hóa đơn bán hàng.
+          Số liệu được tổng hợp trực tiếp từ cơ sở dữ liệu.
         </Text>
       </Stack>
     </>

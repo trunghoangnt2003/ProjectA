@@ -21,10 +21,43 @@ namespace ProjectA.Controllers
 
         [HttpGet]
         [Authorize(Policy = Policies.PaymentView)]
-        public async Task<ActionResult<IEnumerable<PaymentDto>>> GetAll()
+        public async Task<ActionResult<ProjectA.Dtos.Common.PagedResult<PaymentDto>>> GetAll([FromQuery] ProjectA.Dtos.Common.QueryOptions opts)
         {
-            var items = await _dbContext.Payments.AsNoTracking().OrderByDescending(p => p.CreatedAt).ToListAsync();
-            return Ok(items.Select(ToDto));
+            var query = _dbContext.Payments.AsNoTracking();
+
+            if (opts.StartDate.HasValue)
+            {
+                query = query.Where(p => p.CreatedAt >= opts.StartDate.Value);
+            }
+            if (opts.EndDate.HasValue)
+            {
+                query = query.Where(p => p.CreatedAt <= opts.EndDate.Value);
+            }
+            if (!string.IsNullOrWhiteSpace(opts.Search))
+            {
+                var term = opts.Search.ToLower();
+                query = query.Where(p => (p.CustomerName != null && p.CustomerName.ToLower().Contains(term)) || p.Code.ToLower().Contains(term));
+            }
+
+            if (opts.SortBy == "date" || string.IsNullOrWhiteSpace(opts.SortBy))
+            {
+                query = opts.SortDesc ? query.OrderByDescending(p => p.CreatedAt) : query.OrderBy(p => p.CreatedAt);
+            }
+
+            var total = await query.CountAsync();
+            var items = await query
+                .Skip((opts.Page - 1) * opts.PageSize)
+                .Take(opts.PageSize)
+                .Select(p => ToDto(p))
+                .ToListAsync();
+
+            return Ok(new ProjectA.Dtos.Common.PagedResult<PaymentDto>
+            {
+                Items = items,
+                TotalCount = total,
+                Page = opts.Page,
+                PageSize = opts.PageSize
+            });
         }
 
         [HttpGet("{id:guid}")]

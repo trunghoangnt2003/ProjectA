@@ -30,12 +30,18 @@ const STATUS_META: Record<AttendanceStatus, { label: string; color: string }> = 
 };
 const todayIso = new Date().toISOString().slice(0, 10);
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function AttendanceSection() {
-  const [records, setRecords] = useState<Attendance[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(todayIso);
   const [opened, { open, close }] = useDisclosure(false);
+
+  const { data: dayRecords, loading, search, setSearch, page, setPage, totalPages, totalCount, create, update } = usePagedResource(
+    attendanceService,
+    {},
+    { created: "Đã chấm công.", updated: "Đã cập nhật." }
+  );
 
   // form thêm chấm công
   const [empId, setEmpId] = useState<string | null>(null);
@@ -45,22 +51,13 @@ export function AttendanceSection() {
   const [checkOut, setCheckOut] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([attendanceService.list(), employeeService.list()])
-      .then(([a, e]) => {
-        setRecords(a);
-        setEmployees(e.filter((x) => x.status === "active"));
-      })
-      .catch((e) => notify.error(toMessage(e)))
-      .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+  useEffect(() => {
+    employeeService.getAll({ page: 1, pageSize: 1000 }).then(res => setEmployees(res.items.filter(x => x.status === "active")));
+  }, []);
 
-  const dayRecords = useMemo(
-    () => records.filter((r) => r.date === date),
-    [records, date]
-  );
+  useEffect(() => {
+    setSearch(date);
+  }, [date, setSearch]);
 
   const stats = useMemo(() => ({
     present: dayRecords.filter((r) => r.status === "present").length,
@@ -70,12 +67,7 @@ export function AttendanceSection() {
 
   const changeStatus = async (r: Attendance, s: AttendanceStatus) => {
     const { id, ...rest } = r;
-    try {
-      await attendanceService.update(id, { ...rest, status: s });
-      load();
-    } catch (err) {
-      notify.error(toMessage(err));
-    }
+    await update(id, { ...rest, status: s });
   };
 
   const submitAdd = async () => {
@@ -83,7 +75,7 @@ export function AttendanceSection() {
     if (!emp) return notify.error("Chọn nhân viên.");
     setSaving(true);
     try {
-      await attendanceService.create({
+      await create({
         employeeId: emp.id,
         employeeName: emp.name,
         date,
@@ -92,10 +84,8 @@ export function AttendanceSection() {
         checkIn: status === "absent" ? undefined : checkIn || undefined,
         checkOut: status === "absent" ? undefined : checkOut || undefined,
       });
-      notify.success("Đã chấm công.");
       close();
       setEmpId(null); setStatus("present"); setCheckIn(""); setCheckOut("");
-      load();
     } catch (err) {
       notify.error(toMessage(err));
     } finally {
@@ -165,6 +155,10 @@ export function AttendanceSection() {
         rowKey={(r) => r.id}
         loading={loading}
         emptyTitle="Chưa có chấm công ngày này"
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal opened={opened} onClose={close} title="Chấm công" centered>

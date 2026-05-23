@@ -22,9 +22,9 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useDisclosure } from "@mantine/hooks";
-import { IconPlus, IconPencil, IconCheck, IconCrown } from "@tabler/icons-react";
+import { IconPlus, IconPencil, IconCheck, IconCrown, IconSearch } from "@tabler/icons-react";
 import { PageHeader, ConfirmDeleteButton, EmptyState } from "../common";
-import { useCrudResource } from "../../hooks/useCrudResource";
+import { usePagedResource } from "../../hooks/usePagedResource";
 import { membershipService } from "../../services/membershipService";
 import type { MembershipLevel, MembershipPlan } from "../../types/domain";
 import { formatVnd } from "../../lib/format";
@@ -59,11 +59,16 @@ const emptyForm: PlanForm = {
 };
 
 export function MembershipSection() {
-  const { data, loading, create, update, remove } = useCrudResource(membershipService, {
-    created: "Đã tạo gói thành viên.",
-    updated: "Đã cập nhật.",
-    removed: "Đã xóa gói.",
-  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const { data, loading, create, update, remove, search, setSearch, page, setPage, totalPages, totalCount } = usePagedResource(
+    membershipService,
+    {},
+    {
+      created: "Đã tạo gói thành viên.",
+      updated: "Đã cập nhật.",
+      removed: "Đã xóa gói.",
+    }
+  );
   const [opened, { open, close }] = useDisclosure(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -130,6 +135,23 @@ export function MembershipSection() {
           </Button>
         }
       />
+
+      <Card mb="md" p="md">
+        <Group align="flex-end" gap="md" wrap="wrap">
+          <TextInput
+            label="Tìm kiếm"
+            placeholder="Tên gói hoặc cấp độ..."
+            leftSection={<IconSearch size={16} />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchQuery);
+            }}
+            onBlur={() => setSearch(searchQuery)}
+            style={{ flex: 1, minWidth: 220 }}
+          />
+        </Group>
+      </Card>
 
       {loading ? (
         <Center py="xl"><Loader /></Center>

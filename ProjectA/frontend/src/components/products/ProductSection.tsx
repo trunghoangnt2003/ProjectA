@@ -40,14 +40,18 @@ const emptyForm: ProductForm = {
   stock: 0,
 };
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function ProductSection() {
-  const { data, loading, create, update, remove } = useCrudResource(
+  const { data, loading, create, update, remove, page, totalPages, totalCount, setPage, setSearch } = usePagedResource(
     productService,
+    { sortBy: "name", sortDesc: false },
     { created: "Đã thêm hàng hóa.", updated: "Đã cập nhật.", removed: "Đã xóa." }
   );
   const [opened, { open, close }] = useDisclosure(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const form = useForm<ProductForm>({
     initialValues: emptyForm,
@@ -123,9 +127,21 @@ export function ProductSection() {
         title="Hàng hóa"
         subtitle="Đồ uống, đồ ăn và hàng bán cho khách"
         actions={
-          <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-            Thêm hàng hóa
-          </Button>
+          <Group>
+            <TextInput
+              placeholder="Tìm kiếm..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setSearch(searchQuery);
+              }}
+              onBlur={() => setSearch(searchQuery)}
+              style={{ width: 250 }}
+            />
+            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+              Thêm hàng hóa
+            </Button>
+          </Group>
         }
       />
 
@@ -135,6 +151,10 @@ export function ProductSection() {
         rowKey={(p) => p.id}
         loading={loading}
         emptyTitle="Chưa có hàng hóa nào"
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal

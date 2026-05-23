@@ -11,13 +11,14 @@ import {
   TextInput,
   Tooltip,
   ActionIcon,
+  Card,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useDisclosure } from "@mantine/hooks";
-import { IconPlus, IconPencil } from "@tabler/icons-react";
+import { IconPlus, IconPencil, IconSearch } from "@tabler/icons-react";
 import { PageHeader, DataTable, ConfirmDeleteButton } from "../common";
 import type { DataTableColumn } from "../common";
-import { useCrudResource } from "../../hooks/useCrudResource";
+import { usePagedResource } from "../../hooks/usePagedResource";
 import { employeeService } from "../../services/employeeService";
 import type { Employee } from "../../types/domain";
 import { SHIFT_OPTIONS, shiftLabel } from "../../constants/shifts";
@@ -39,7 +40,8 @@ const emptyForm: EmployeeForm = {
 };
 
 export function EmployeeSection() {
-  const { data, loading, create, update, remove } = useCrudResource(
+  const [searchQuery, setSearchQuery] = useState("");
+  const { data, loading, create, update, remove, search, setSearch, page, setPage, totalPages, totalCount } = usePagedResource(
     employeeService,
     { created: "Đã thêm nhân viên.", updated: "Đã cập nhật.", removed: "Đã xóa nhân viên." }
   );
@@ -139,12 +141,33 @@ export function EmployeeSection() {
         }
       />
 
+      <Card mb="md" p="md">
+        <Group align="flex-end" gap="md" wrap="wrap">
+          <TextInput
+            label="Tìm kiếm"
+            placeholder="Tên, điện thoại..."
+            leftSection={<IconSearch size={16} />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchQuery);
+            }}
+            onBlur={() => setSearch(searchQuery)}
+            style={{ flex: 1, minWidth: 220 }}
+          />
+        </Group>
+      </Card>
+
       <DataTable
         data={data}
         columns={columns}
         rowKey={(e) => e.id}
         loading={loading}
         emptyTitle="Chưa có nhân viên nào"
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal

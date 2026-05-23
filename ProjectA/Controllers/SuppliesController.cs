@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProjectA.Authorization;
 using ProjectA.Data;
+using ProjectA.Dtos.Common;
 using ProjectA.Dtos.Supply;
 using ProjectA.Models;
 
@@ -21,10 +22,34 @@ namespace ProjectA.Controllers
 
         [HttpGet]
         [Authorize(Policy = Policies.SupplyView)]
-        public async Task<ActionResult<IEnumerable<SupplyDto>>> GetAll()
+        public async Task<ActionResult<PagedResult<SupplyDto>>> GetAll([FromQuery] QueryOptions opts)
         {
-            var items = await _dbContext.Supplies.AsNoTracking().OrderBy(s => s.Name).ToListAsync();
-            return Ok(items.Select(ToDto));
+            var query = _dbContext.Supplies.AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(opts.Search))
+            {
+                var s = opts.Search.ToLower();
+                query = query.Where(x => x.Name.ToLower().Contains(s) || (x.Category != null && x.Category.ToLower().Contains(s)));
+            }
+
+            query = opts.SortBy?.ToLower() switch
+            {
+                "quantity" => opts.SortDesc ? query.OrderByDescending(x => x.Quantity) : query.OrderBy(x => x.Quantity),
+                _ => opts.SortDesc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name)
+            };
+
+            var totalCount = await query.CountAsync();
+            var items = await query.Skip((opts.Page - 1) * opts.PageSize).Take(opts.PageSize)
+                .Select(x => ToDto(x))
+                .ToListAsync();
+
+            return Ok(new PagedResult<SupplyDto>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = opts.Page,
+                PageSize = opts.PageSize
+            });
         }
 
         [HttpGet("{id:guid}")]

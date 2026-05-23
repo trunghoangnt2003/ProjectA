@@ -67,9 +67,12 @@ const emptyForm: CustomerForm = {
   joinedAt: new Date().toISOString().slice(0, 10),
 };
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function CustomerSection() {
-  const { data, loading, create, update, remove } = useCrudResource(
+  const { data: filtered, loading, create, update, remove, page, totalPages, totalCount, setPage, setSearch } = usePagedResource(
     customerService,
+    { sortBy: "name", sortDesc: false },
     { created: "Đã thêm khách hàng.", updated: "Đã cập nhật.", removed: "Đã xóa khách hàng." }
   );
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -77,7 +80,7 @@ export function CustomerSection() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [tagFilter, setTagFilter] = useState<CustomerTag | "all">("all");
 
   // Drawer chi tiết
@@ -86,12 +89,13 @@ export function CustomerSection() {
   const [pointsToAdd, setPointsToAdd] = useState<number>(0);
 
   useEffect(() => {
-    bookingService.list().then(setBookings).catch((e) => notify.error(toMessage(e)));
+    // bookingService.getAll() returns PagedResult now. Using a large pageSize to get recent bookings
+    bookingService.getAll({ pageSize: 1000 }).then(res => setBookings(res.items)).catch((e) => notify.error(toMessage(e)));
   }, []);
 
   const selected = useMemo(
-    () => data.find((c) => c.id === selectedId) ?? null,
-    [data, selectedId]
+    () => filtered.find((c) => c.id === selectedId) ?? null,
+    [filtered, selectedId]
   );
 
   // Đồng bộ note nháp khi mở khách khác.
@@ -106,16 +110,6 @@ export function CustomerSection() {
       .filter((b) => b.customerPhone === selected.phone)
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [bookings, selected]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return data.filter((c) => {
-      if (tagFilter !== "all" && !c.tags.includes(tagFilter)) return false;
-      if (q && !c.name.toLowerCase().includes(q) && !c.phone.includes(q) && !(c.email ?? "").toLowerCase().includes(q))
-        return false;
-      return true;
-    });
-  }, [data, search, tagFilter]);
 
   const form = useForm<CustomerForm>({
     initialValues: emptyForm,
@@ -184,7 +178,7 @@ export function CustomerSection() {
   const saveNote = (c: Customer) =>
     patchCustomer(c, { note: noteDraft.trim() || undefined }, "Đã lưu ghi chú.");
 
-  const hasFilter = search.trim() !== "" || tagFilter !== "all";
+  const hasFilter = searchQuery.trim() !== "" || tagFilter !== "all";
 
   const columns: DataTableColumn<Customer>[] = [
     {
@@ -270,8 +264,12 @@ export function CustomerSection() {
             label="Tìm kiếm"
             placeholder="Tên, SĐT hoặc email…"
             leftSection={<IconSearch size={16} />}
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchQuery);
+            }}
+            onBlur={() => setSearch(searchQuery)}
             style={{ flex: 1, minWidth: 220 }}
           />
           <MultiSelect
@@ -284,7 +282,7 @@ export function CustomerSection() {
             onChange={(v) => setTagFilter((v[v.length - 1] as CustomerTag) ?? "all")}
           />
           {hasFilter && (
-            <Button variant="subtle" color="gray" leftSection={<IconX size={16} />} onClick={() => { setSearch(""); setTagFilter("all"); }}>
+            <Button variant="subtle" color="gray" leftSection={<IconX size={16} />} onClick={() => { setSearchQuery(""); setSearch(""); setTagFilter("all"); }}>
               Xóa lọc
             </Button>
           )}
@@ -292,11 +290,15 @@ export function CustomerSection() {
       </Card>
 
       <DataTable
-        data={filtered}
+        data={filtered.filter(c => tagFilter === "all" || c.tags.includes(tagFilter))}
         columns={columns}
         rowKey={(c) => c.id}
         loading={loading}
         emptyTitle={hasFilter ? "Không có khách khớp bộ lọc" : "Chưa có khách hàng nào"}
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       {/* Hồ sơ khách */}

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProjectA.Authorization;
 using ProjectA.Data;
+using ProjectA.Dtos.Common;
 using ProjectA.Dtos.Court;
 using ProjectA.Models;
 
@@ -21,14 +22,33 @@ namespace ProjectA.Controllers
 
         [HttpGet]
         [Authorize(Policy = Policies.CourtView)]
-        public async Task<ActionResult<IEnumerable<CourtDto>>> GetAll()
+        public async Task<ActionResult<PagedResult<CourtDto>>> GetAll([FromQuery] QueryOptions opts)
         {
-            var courts = await _dbContext.Courts
-                .AsNoTracking()
-                .OrderBy(c => c.Name)
+            var query = _dbContext.Courts.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(opts.Search))
+            {
+                var term = opts.Search.ToLower();
+                query = query.Where(c => c.Name.ToLower().Contains(term));
+            }
+
+            query = opts.SortDesc ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name);
+
+            var total = await query.CountAsync();
+
+            var items = await query
+                .Skip((opts.Page - 1) * opts.PageSize)
+                .Take(opts.PageSize)
+                .Select(c => ToDto(c))
                 .ToListAsync();
 
-            return Ok(courts.Select(ToDto));
+            return Ok(new PagedResult<CourtDto>
+            {
+                Items = items,
+                TotalCount = total,
+                Page = opts.Page,
+                PageSize = opts.PageSize
+            });
         }
 
         [HttpGet("{id:guid}")]

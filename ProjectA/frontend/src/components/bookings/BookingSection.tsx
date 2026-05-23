@@ -96,9 +96,12 @@ function addDaysIso(iso: string, days: number): string {
 
 const newCode = () => "BK-" + Math.floor(1000 + Math.random() * 9000);
 
+import { usePagedResource } from "../../hooks/usePagedResource";
+
 export function BookingSection() {
-  const { data, loading, reload, update, remove } = useCrudResource(
+  const { data, loading, reload, update, remove, opts, page, totalPages, totalCount, setPage, setSearch, setDateRange, setPageSize } = usePagedResource(
     bookingService,
+    { startDate: todayIso, endDate: todayIso, sortBy: "date", sortDesc: true },
     { created: "Đã tạo lượt đặt.", updated: "Đã cập nhật.", removed: "Đã xóa lượt đặt." }
   );
   const [courts, setCourts] = useState<Court[]>([]);
@@ -116,9 +119,9 @@ export function BookingSection() {
   const [cancelReason, setCancelReason] = useState("");
 
   const [view, setView] = useState<ViewMode>("list");
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [listDate, setListDate] = useState("");
+  const [listDate, setListDate] = useState(todayIso);
   const [calDate, setCalDate] = useState(todayIso);
 
   useEffect(() => {
@@ -135,33 +138,35 @@ export function BookingSection() {
   });
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return data.filter((b) => {
       if (statusFilter !== "all" && b.status !== statusFilter) return false;
-      if (listDate && b.date !== listDate) return false;
-      if (
-        q &&
-        !b.code.toLowerCase().includes(q) &&
-        !b.customerName.toLowerCase().includes(q) &&
-        !b.customerPhone.includes(q) &&
-        !b.courtName.toLowerCase().includes(q)
-      )
-        return false;
       return true;
     });
-  }, [data, search, statusFilter, listDate]);
+  }, [data, statusFilter]);
 
   const calBookings = useMemo(
     () => data.filter((b) => b.date === calDate),
     [data, calDate]
   );
 
-  const hasFilter = search.trim() !== "" || statusFilter !== "all" || listDate !== "";
+  const hasFilter = searchQuery.trim() !== "" || statusFilter !== "all" || listDate !== "";
   const clearFilters = () => {
+    setSearchQuery("");
     setSearch("");
     setStatusFilter("all");
     setListDate("");
+    setDateRange(undefined, undefined);
   };
+
+  useEffect(() => {
+    if (view === "calendar") {
+      setDateRange(calDate, calDate);
+      setPageSize(500);
+    } else {
+      setDateRange(listDate || undefined, listDate || undefined);
+      setPageSize(20);
+    }
+  }, [view, calDate, listDate]);
 
   const courtOptions = courts.map((c) => c.name);
 
@@ -396,8 +401,12 @@ export function BookingSection() {
                 label="Tìm kiếm"
                 placeholder="Mã, khách, SĐT hoặc sân…"
                 leftSection={<IconSearch size={16} />}
-                value={search}
-                onChange={(e) => setSearch(e.currentTarget.value)}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setSearch(searchQuery);
+                }}
+                onBlur={() => setSearch(searchQuery)}
                 style={{ flex: 1, minWidth: 220 }}
               />
               <Select
@@ -430,9 +439,6 @@ export function BookingSection() {
                 </Button>
               )}
             </Group>
-            <Text size="xs" c="dimmed" mt="sm">
-              {filtered.length} / {data.length} lượt đặt
-            </Text>
           </Card>
 
           <DataTable
@@ -441,6 +447,10 @@ export function BookingSection() {
             rowKey={(b) => b.id}
             loading={loading}
             emptyTitle={hasFilter ? "Không có lượt đặt khớp bộ lọc" : "Chưa có lượt đặt nào"}
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            onPageChange={setPage}
           />
         </>
       ) : (

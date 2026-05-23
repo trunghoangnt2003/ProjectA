@@ -17,10 +17,10 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useDisclosure } from "@mantine/hooks";
-import { IconSend, IconMessage, IconBell } from "@tabler/icons-react";
+import { IconSend, IconMessage, IconBell, IconSearch } from "@tabler/icons-react";
 import { PageHeader, DataTable, StatCard } from "../common";
 import type { DataTableColumn } from "../common";
-import { useCrudResource } from "../../hooks/useCrudResource";
+import { usePagedResource } from "../../hooks/usePagedResource";
 import { automationService, notificationService } from "../../services/notificationService";
 import type {
   AppNotification,
@@ -55,15 +55,20 @@ interface SendForm {
 }
 
 export function NotificationSection() {
-  const { data: notifs, loading, create } = useCrudResource(notificationService, {
-    created: "Đã tạo thông báo.",
-  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const { data: notifs, loading, create, search, setSearch, page, setPage, totalPages, totalCount } = usePagedResource(
+    notificationService,
+    {},
+    {
+      created: "Đã tạo thông báo.",
+    }
+  );
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [opened, { open, close }] = useDisclosure(false);
   const [saving, setSaving] = useState(false);
   const [channelFilter, setChannelFilter] = useState<NotificationChannel | "all">("all");
 
-  const loadRules = () => automationService.list().then(setRules).catch((e) => notify.error(toMessage(e)));
+  const loadRules = () => automationService.getAll({ pageSize: 1000 }).then(res => setRules(res.items)).catch((e) => notify.error(toMessage(e)));
   useEffect(() => { loadRules(); }, []);
 
   const stats = useMemo(() => ({
@@ -176,16 +181,40 @@ export function NotificationSection() {
           </SimpleGrid>
 
           <Card mb="md" p="md">
-            <Select
-              label="Kênh"
-              w={180}
-              value={channelFilter}
-              onChange={(v) => setChannelFilter((v as NotificationChannel | "all") ?? "all")}
-              data={[{ value: "all", label: "Tất cả kênh" }, ...CHANNEL_OPTIONS]}
-            />
+            <Group align="flex-end" gap="md" wrap="wrap">
+              <Select
+                label="Kênh"
+                w={180}
+                value={channelFilter}
+                onChange={(v) => setChannelFilter((v as NotificationChannel | "all") ?? "all")}
+                data={[{ value: "all", label: "Tất cả kênh" }, ...CHANNEL_OPTIONS]}
+              />
+              <TextInput
+                label="Tìm kiếm"
+                placeholder="Tiêu đề hoặc nội dung..."
+                leftSection={<IconSearch size={16} />}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setSearch(searchQuery);
+                }}
+                onBlur={() => setSearch(searchQuery)}
+                style={{ flex: 1, minWidth: 220 }}
+              />
+            </Group>
           </Card>
 
-          <DataTable data={view} columns={columns} rowKey={(n) => n.id} loading={loading} emptyTitle="Chưa có thông báo nào" />
+          <DataTable 
+            data={view} 
+            columns={columns} 
+            rowKey={(n) => n.id} 
+            loading={loading} 
+            emptyTitle="Chưa có thông báo nào" 
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            onPageChange={setPage}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="automation">

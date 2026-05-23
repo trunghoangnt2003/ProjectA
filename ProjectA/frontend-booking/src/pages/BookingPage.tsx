@@ -11,7 +11,7 @@ import {
 } from "@mantine/core";
 import type { Booking, Court } from "../types/domain";
 import { courtService } from "../services/courtService";
-import { bookingService } from "../services/bookingService";
+import { bookingService, setCourtMaps } from "../services/bookingService";
 import { BookingGrid } from "../components/BookingGrid";
 import { BookingSummary } from "../components/BookingSummary";
 import { AppLoader } from "../components/AppLoader";
@@ -28,7 +28,10 @@ export function BookingPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    courtService.list().then(setCourts);
+    courtService.list().then((c) => {
+      setCourts(c);
+      setCourtMaps(c);
+    });
   }, []);
 
   const loadBookings = (d: string) => {

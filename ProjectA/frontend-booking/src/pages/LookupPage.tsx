@@ -14,7 +14,7 @@ import {
 } from "@mantine/core";
 import { IconSearch, IconTicket, IconCalendarEvent } from "@tabler/icons-react";
 import { courtService } from "../services/courtService";
-import { bookingService } from "../services/bookingService";
+import { bookingService, setCourtMaps } from "../services/bookingService";
 import type { Booking, Court } from "../types/domain";
 import { slotStart, slotEnd } from "../lib/time";
 import { getPlayStatus } from "../lib/bookingStatus";
@@ -29,7 +29,10 @@ export function LookupPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    courtService.list().then(setCourts);
+    courtService.list().then((c) => {
+      setCourts(c);
+      setCourtMaps(c);
+    });
   }, []);
 
   const courtById = useMemo(

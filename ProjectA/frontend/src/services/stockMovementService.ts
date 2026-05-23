@@ -1,20 +1,26 @@
 import type { StockMovement } from "../types/domain";
-import { createMockService } from "./mock/mockClient";
+import type { PagedResult, QueryOptions } from "../types";
+import { api } from "./api";
 
-const today = new Date();
-const atDay = (ago: number, h: number) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() - ago);
-  d.setHours(h, 0, 0, 0);
-  return d.toISOString();
+export const stockMovementService = {
+  getAll: async (opts: QueryOptions = {}): Promise<PagedResult<StockMovement>> => {
+    const params = new URLSearchParams();
+    if (opts.page) params.append("page", opts.page.toString());
+    if (opts.pageSize) params.append("pageSize", opts.pageSize.toString());
+    if (opts.startDate) params.append("startDate", opts.startDate);
+    if (opts.endDate) params.append("endDate", opts.endDate);
+    if (opts.sortBy) params.append("sortBy", opts.sortBy);
+    if (opts.sortDesc !== undefined) params.append("sortDesc", opts.sortDesc.toString());
+    if (opts.search) params.append("search", opts.search);
+
+    const qs = params.toString();
+    return api<PagedResult<StockMovement>>(`/api/stock-movements${qs ? `?${qs}` : ""}`);
+  },
+
+  create: async (item: Omit<StockMovement, "id" | "createdAt" | "balanceAfter">): Promise<StockMovement> => {
+    return api<StockMovement>("/api/stock-movements", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+  },
 };
-
-// Lịch sử nhập/xuất mẫu (số tồn ban đầu trong product/supplyService đã phản ánh các giao dịch này).
-const seed: StockMovement[] = [
-  { id: "m1", createdAt: atDay(3, 9), itemSource: "product", itemId: "p1", itemName: "Nước suối Aquafina 500ml", type: "in", quantity: 100, balanceAfter: 120, reason: "Nhập nhà cung cấp" },
-  { id: "m2", createdAt: atDay(2, 14), itemSource: "supply", itemId: "s1", itemName: "Cầu lông Yonex AS-30", type: "in", quantity: 20, balanceAfter: 24, reason: "Nhập kho định kỳ" },
-  { id: "m3", createdAt: atDay(1, 18), itemSource: "product", itemId: "p3", itemName: "Coca-Cola lon", type: "out", quantity: 12, balanceAfter: 8, reason: "Bán lẻ trong ngày" },
-  { id: "m4", createdAt: atDay(1, 20), itemSource: "supply", itemId: "s5", itemName: "Lưới sân thi đấu", type: "out", quantity: 1, balanceAfter: 4, reason: "Thay lưới Sân 4" },
-];
-
-export const stockMovementService = createMockService(seed);

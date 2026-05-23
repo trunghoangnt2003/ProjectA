@@ -51,14 +51,10 @@ export function DashboardPage({ userEmail, onLogout }: DashboardPageProps) {
   // Module đang mở suy ra từ URL (vd "/courts" -> "courts").
   const activeKey = location.pathname.split("/")[1] || "overview";
 
-  // Chỉ hiện menu mà user có quyền; bỏ nhóm rỗng.
+  // Hiển thị toàn bộ menu (theo yêu cầu tạm thời)
   const visibleGroups = useMemo(
-    () =>
-      NAV_GROUPS.map((g) => ({
-        ...g,
-        items: g.items.filter((i) => can(i.permission)),
-      })).filter((g) => g.items.length > 0),
-    [can]
+    () => NAV_GROUPS,
+    []
   );
 
   return (

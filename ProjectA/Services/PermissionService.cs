@@ -10,6 +10,7 @@ namespace ProjectA.Services
     {
         Task<bool> UserHasPermissionAsync(string userId, string permission);
         Task InvalidateUserAsync(string userId);
+        Task<HashSet<string>> GetPermissionsAsync(string userId);
     }
 
     public class PermissionService : IPermissionService
@@ -50,7 +51,7 @@ namespace ProjectA.Services
             return _cache.RemoveAsync(GetCacheKey(userId));
         }
 
-        private async Task<HashSet<string>> GetPermissionsAsync(string userId)
+        public async Task<HashSet<string>> GetPermissionsAsync(string userId)
         {
             var cacheKey = GetCacheKey(userId);
             var cached = await _cache.GetStringAsync(cacheKey);
@@ -103,6 +104,11 @@ namespace ProjectA.Services
 
         private static bool HasWildcardPermission(HashSet<string> permissions, string permission)
         {
+            if (permissions.Contains(Permissions.All))
+            {
+                return true;
+            }
+
             var lastDotIndex = permission.LastIndexOf('.');
             if (lastDotIndex <= 0)
             {

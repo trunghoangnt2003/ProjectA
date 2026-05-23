@@ -21,10 +21,43 @@ namespace ProjectA.Controllers
 
         [HttpGet]
         [Authorize(Policy = Policies.OrderView)]
-        public async Task<ActionResult<IEnumerable<OrderDto>>> GetAll()
+        public async Task<ActionResult<ProjectA.Dtos.Common.PagedResult<OrderDto>>> GetAll([FromQuery] ProjectA.Dtos.Common.QueryOptions opts)
         {
-            var items = await _dbContext.Orders.AsNoTracking().OrderByDescending(o => o.CreatedAt).ToListAsync();
-            return Ok(items.Select(ToDto));
+            var query = _dbContext.Orders.AsNoTracking();
+
+            if (opts.StartDate.HasValue)
+            {
+                query = query.Where(o => o.CreatedAt >= opts.StartDate.Value);
+            }
+            if (opts.EndDate.HasValue)
+            {
+                query = query.Where(o => o.CreatedAt <= opts.EndDate.Value);
+            }
+            if (!string.IsNullOrWhiteSpace(opts.Search))
+            {
+                var term = opts.Search.ToLower();
+                query = query.Where(o => (o.CustomerName != null && o.CustomerName.ToLower().Contains(term)) || o.Code.ToLower().Contains(term));
+            }
+
+            if (opts.SortBy == "date" || string.IsNullOrWhiteSpace(opts.SortBy))
+            {
+                query = opts.SortDesc ? query.OrderByDescending(o => o.CreatedAt) : query.OrderBy(o => o.CreatedAt);
+            }
+
+            var total = await query.CountAsync();
+            var items = await query
+                .Skip((opts.Page - 1) * opts.PageSize)
+                .Take(opts.PageSize)
+                .Select(o => ToDto(o))
+                .ToListAsync();
+
+            return Ok(new ProjectA.Dtos.Common.PagedResult<OrderDto>
+            {
+                Items = items,
+                TotalCount = total,
+                Page = opts.Page,
+                PageSize = opts.PageSize
+            });
         }
 
         [HttpGet("{id:guid}")]

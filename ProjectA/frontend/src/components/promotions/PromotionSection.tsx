@@ -18,10 +18,10 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useDisclosure } from "@mantine/hooks";
-import { IconPlus, IconPencil, IconDiscount2, IconClock, IconTicket } from "@tabler/icons-react";
+import { IconPlus, IconPencil, IconDiscount2, IconClock, IconTicket, IconSearch } from "@tabler/icons-react";
 import { PageHeader, DataTable, StatCard, ConfirmDeleteButton } from "../common";
 import type { DataTableColumn } from "../common";
-import { useCrudResource } from "../../hooks/useCrudResource";
+import { usePagedResource } from "../../hooks/usePagedResource";
 import { promotionService } from "../../services/promotionService";
 import type { Promotion, PromotionType } from "../../types/domain";
 import { formatVnd, formatDate } from "../../lib/format";
@@ -70,11 +70,16 @@ function validityText(p: Promotion): string {
 const isExpired = (p: Promotion) => !!p.endDate && p.endDate < todayIso;
 
 export function PromotionSection() {
-  const { data, loading, create, update, remove } = useCrudResource(promotionService, {
-    created: "Đã tạo khuyến mãi.",
-    updated: "Đã cập nhật.",
-    removed: "Đã xóa khuyến mãi.",
-  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const { data, loading, create, update, remove, search, setSearch, page, setPage, totalPages, totalCount } = usePagedResource(
+    promotionService,
+    {},
+    {
+      created: "Đã tạo khuyến mãi.",
+      updated: "Đã cập nhật.",
+      removed: "Đã xóa khuyến mãi.",
+    }
+  );
   const [opened, { open, close }] = useDisclosure(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -225,12 +230,33 @@ export function PromotionSection() {
         <StatCard label="Tổng lượt dùng" value={stats.totalUsed} icon={<IconDiscount2 size={26} />} color="brand" />
       </SimpleGrid>
 
+      <Card mb="md" p="md">
+        <Group align="flex-end" gap="md" wrap="wrap">
+          <TextInput
+            label="Tìm kiếm"
+            placeholder="Mã hoặc tên khuyến mãi..."
+            leftSection={<IconSearch size={16} />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchQuery);
+            }}
+            onBlur={() => setSearch(searchQuery)}
+            style={{ flex: 1, minWidth: 220 }}
+          />
+        </Group>
+      </Card>
+
       <DataTable
         data={data}
         columns={columns}
         rowKey={(p) => p.id}
         loading={loading}
         emptyTitle="Chưa có khuyến mãi nào"
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={setPage}
       />
 
       <Modal opened={opened} onClose={close} title={editingId ? "Sửa khuyến mãi" : "Tạo khuyến mãi"} centered>
